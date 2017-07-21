@@ -31,7 +31,7 @@
           </ul>
           <ul class="nav navbar-nav navbar-right">
             {% if True %}
-            <li><a href="#" id="">NOT Right</a></li>
+            <li><a href="#" id="">Trueth</a></li>
             {% else %}
             <li><a href="#" id="">Yes Right</a></li>
             {% endif %}
@@ -40,6 +40,12 @@
         </div>
       </div>
     </nav>
+    
+    <p>The profile is </p>  {{ prof }}
+    <p></p>    
+    <p>The output series is </p>  {{ out_ser }}
+    <p></p>
+    <p>The sum is </p>  {{ out_sum }}
     {% block content %} 
     {% endblock %}
   </body>
