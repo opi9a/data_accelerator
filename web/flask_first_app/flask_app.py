@@ -1,7 +1,15 @@
 from flask import Flask, render_template
+from flask_wtf import Form
+from wtforms import StringField, SubmitField
+from wtforms.validators import Required
+
 import pandas as pd
 import numpy as np
 from spend_engine_funcs import get_forecast
+
+class MyForm(Form):
+	name = StringField('And you are?')
+	submit = SubmitField('Submit')
 
 # first functionality:
 # 	- input form, takes profile (csv file path) plus other data reqd
@@ -27,10 +35,40 @@ test_input = "The sum of the profile is  " + str(x)  # passed into template
 
 @app.route('/')
 def home():
-	return render_template('my_layout.html', 
+	content="this is the home page"
+	return render_template('test_block.html', 
+							content=content,
 							prof = test_profile2, 
 							out_ser=x,
 							out_sum=str(sum(x)))
+
+
+@app.route('/sim/', methods=['GET', 'POST'])
+def sim():
+	content="this is the simulator"
+	dbg="XXX"
+
+	# form = MyForm
+	# name = None
+	# # if form.validate_on_submit():
+	# name = form.name.data
+	# form.name.date = ''
+
+	return render_template('sim_block.html', 
+							# name=name, form=form,
+							content=content, dbg=dbg)
+
+@app.route('/explorer/')
+def explore():
+	dbg=None
+	content="this is the explorer"
+	return render_template('test_block.html', content=content, dbg=dbg)
+
+@app.route('/profiler/')
+def profile():
+	content="this is the profiler"
+	dbg="XXX"
+	return render_template('test_block.html', content=content, dbg=dbg)
 
 if __name__ == '__main__':
 	app.run(debug=True)
