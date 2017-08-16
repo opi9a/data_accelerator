@@ -6,9 +6,10 @@ import r_funcs
 import projection_funcs
 import inspect
 
+
 class RuleSet:
-    def __init__(self, parent_df, name, 
-                 index_selection={}, r_func=None, r_args={}):
+    def __init__(self, parent_df, name, index_selection={}, 
+                 r_func=None, r_args={}, join_output=True):
         self.name = name
         self.parent_df = parent_df
         self.index_dims = self.parent_df.index.names
@@ -17,7 +18,7 @@ class RuleSet:
         self.r_args = r_args
         self.past = None
         self.fut = None
-        self.all = None
+        self.join_output=join_output
         
     def get_arg_keys(self):
         #todo: parse out in best way
@@ -27,5 +28,7 @@ class RuleSet:
         self.past = self.parent_df.loc[projection_funcs.get_ix_slice(
                         self.parent_df, **self.index_selection),:]
         self.fut = self.r_func(self.past, n_pers, **self.r_args)
-        self.all = self.past.join(self.fut)
-        return self.all
+        if self.join_output:
+            return self.past.join(self.fut)
+        else:
+            return self.fut
