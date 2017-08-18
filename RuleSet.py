@@ -20,11 +20,40 @@ class RuleSet:
         self.fut = None
         self.join_output=join_output
         self.joined = None
+
        
-    def get_arg_keys(self):
+    def set_slice(self, a_slice):
+
+        wrong_keys = [k for k in a_slice.keys() 
+                        if k not in self.index_dims]
+        if wrong_keys:
+            print("These keys aren't in the index: ", wrong_keys)
+
+        else: self.index_selection = a_slice
+
+
+
+    def set_args(self, a_args):
+
+        if self.r_func==None:
+            print("no function yet")
+            return
+
+        wrong_keys = [k for k in a_args.keys() 
+                        if k not in inspect.getfullargspec(self.r_func)[4]]
+
+        if wrong_keys:
+            print("Args aren't parameters of ", self.r_func.__name__,": ", wrong_keys)
+
+        else: self.r_args = a_args
+
+
+
+    def get_params(self):
         #todo: parse out in best way
         return inspect.getfullargspec(self.r_func)[4]
     
+
     def xtrap(self, n_pers):
         self.past = self.parent_df.loc[projection_funcs.get_ix_slice(
                         self.parent_df, **self.index_selection),:]
@@ -52,6 +81,9 @@ class RuleSet:
             temp_string = key.ljust(27) + str(self._info[key]).rjust(10)
             outlist.append(temp_string)
         return "\n".join(outlist)
+    
+
+
     
 if __name__ == "__main__":
     df = pd.read_pickle('c:/Users/groberta/Work/data_accelerator/spend_data_proc/dfs/main_unstacked_17AUG.pkl')
