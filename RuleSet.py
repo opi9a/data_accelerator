@@ -20,7 +20,6 @@ class RuleSet:
         self.fut = None
         self.join_output=join_output
         self.joined = None
-        
        
     def get_arg_keys(self):
         #todo: parse out in best way
@@ -30,8 +29,14 @@ class RuleSet:
         self.past = self.parent_df.loc[projection_funcs.get_ix_slice(
                         self.parent_df, **self.index_selection),:]
         self.fut = self.r_func(self.past, n_pers, **self.r_args)
+        
         if self.join_output:
-            self.joined = self.past.join(self.fut)
+            try:
+                self.joined = self.past.join(self.fut)
+            except:
+                self.joined = pd.DataFrame(pd.concat([self.past.sum(),self.fut.sum()]), 
+                                            columns=['joined']).T
+
         
     def __repr__(self):
         outlist = []
