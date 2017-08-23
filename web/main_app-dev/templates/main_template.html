@@ -21,9 +21,9 @@
 
 {% block content %}
 
-<div class="container-fluid"><form method="POST">
-  <table class="table table-condensed">
+<div class="container-fluid"><form method="POST">{{ form.csrf_token }}
 
+  <table class="table table-condensed">
 
     <thead><tr class="info">
       <th>Name</th>
@@ -36,41 +36,50 @@
 
 {%for r in rulesets %}
 
-
-
     <tbody>
       <tr>
         <td>{{ form[r]['rname']() }}</td>
 
         <td>{%for i in index_dims %}          
-            <p>{{ i }}</p>
+            <p style="height: 18px">{{ i }}</p>
             {% endfor %}
         </td>        
 
         <td>{%for i in index_dims %}          
-            <p>{{ form[r]['index_slice'][i]() }}</p>
+            <p style="height: 18px">{{ form[r]['index_slice'][i]() }}</p>
             {% endfor %}
         </td>
 
         <td>{{ form[r]['func']() }}</td>
 
         <td>{%for p in params %}          
-            <p>{{ p }}</p>
+            <p style="height: 18px">{{ p }}</p>
             {% endfor %}
         </td>        
 
         <td>{%for p in params %}          
-            <p>{{ form[r]['args'][p]() }}</p>
+            <p style="height: 18px">{{ form[r]['args'][p]() }}</p>
             {% endfor %}
         </td>
 
       </tr>
     </tbody>
-    {% endfor %}
+{% endfor %}
   </table>
-<p></p>
 
-{{ form.submit() }}  {{ form.csrf_token }}</form></div>
+  <p>{{ wtf.form_field(form.submit, class="btn btn-success pull-left") }} </p>
+  <p></p>
+
+
+  <p align="right">{{ wtf.form_field(form.add_ruleset, class="btn btn-primary") }}</p>
+
+
+  <p align="right">{{ form.new_name() }}</p>
+
+  <p align="left">{{ wtf.form_field(form.clear_all, class="btn btn-danger") }} </p>
+
+
+</form></div>
 
 {% endblock %}
 
