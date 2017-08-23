@@ -8,14 +8,14 @@ import inspect
 
 
 class RuleSet:
-    def __init__(self, parent_df, name, index_selection={}, 
-                 r_func=None, r_args={}, join_output=True):
+    def __init__(self, parent_df, name, index_slice={}, 
+                 func=None, f_args={}, join_output=True):
         self.name = name
         self.parent_df = parent_df
         self.index_dims = self.parent_df.index.names
-        self.index_selection = index_selection
-        self.r_func = r_func
-        self.r_args = r_args
+        self.index_slice = index_slice
+        self.func = func
+        self.f_args = f_args
         self.past = None
         self.fut = None
         self.join_output=join_output
@@ -23,41 +23,44 @@ class RuleSet:
 
        
     def set_slice(self, a_slice):
+        '''Set the index_slice dictionary'''
 
         wrong_keys = [k for k in a_slice.keys() 
                         if k not in self.index_dims]
         if wrong_keys:
             print("These keys aren't in the index: ", wrong_keys)
 
-        else: self.index_selection = a_slice
+        else: self.index_slice = a_slice
 
 
 
     def set_args(self, a_args):
+        '''Set the f_args dictionary - passed to self.func()'''
 
-        if self.r_func==None:
+        if self.func==None:
             print("no function yet")
             return
 
         wrong_keys = [k for k in a_args.keys() 
-                        if k not in inspect.getfullargspec(self.r_func)[4]]
+                        if k not in inspect.getfullargspec(self.func)[4]]
 
         if wrong_keys:
-            print("Args aren't parameters of ", self.r_func.__name__,": ", wrong_keys)
+            print("Args aren't parameters of ", self.func.__name__,": ", wrong_keys)
 
-        else: self.r_args = a_args
+        else: self.f_args = a_args
 
 
 
     def get_params(self):
         #todo: parse out in best way
-        return inspect.getfullargspec(self.r_func)[4]
+        return inspect.getfullargspec(self.func)[4]
+
     
 
     def xtrap(self, n_pers):
         self.past = self.parent_df.loc[projection_funcs.get_ix_slice(
-                        self.parent_df, **self.index_selection),:]
-        self.fut = self.r_func(self.past, n_pers, **self.r_args)
+                        self.parent_df, **self.index_slice),:]
+        self.fut = self.func(self.past, n_pers, **self.f_args)
         
         if self.join_output:
             try:
@@ -71,9 +74,9 @@ class RuleSet:
         outlist = []
         self._info = {"name": self.name,
              "index_dims": self.index_dims,
-             "index_selection": self.index_selection,
-             "r_func": self.r_func,
-             "r_args keys": list(self.r_args.keys()),
+             "index_slice": self.index_slice,
+             "func": self.func,
+             "f_args keys": list(self.f_args.keys()),
              "past type": type(self.past),
              "fut type": type(self.fut),
              "join_output": self.join_output}
@@ -94,17 +97,17 @@ if __name__ == "__main__":
     
     if test == 1:    
         test_r = RuleSet(df, 't1')
-        test_r.index_selection = {'biol':True}
-        test_r.r_func = r_funcs.r_profile
-        test_r.r_args = {'profile':prof1, 'gen_mult':0.5}
+        test_r.index_slice = {'biol':True}
+        test_r.func = funcs.r_profile
+        test_r.f_args = {'profile':prof1, 'gen_mult':0.5}
         print(test_r)
         test_r.xtrap(120)
 
     if test == 2:    
         test_r = RuleSet(df, 't2')
-        test_r.index_selection = {'start_date':slice(cutoff,None,None)}
-        test_r.r_func = r_funcs.r_fut
-        test_r.r_args = {'profile':prof1, 'cutoff_date':cutoff, 
+        test_r.index_slice = {'start_date':slice(cutoff,None,None)}
+        test_r.func = funcs.r_fut
+        test_r.f_args = {'profile':prof1, 'cutoff_date':cutoff, 
                             'coh_growth':0, 'term_growth':0, 'name':'fut'}
         print(test_r)
         test_r.xtrap(120)

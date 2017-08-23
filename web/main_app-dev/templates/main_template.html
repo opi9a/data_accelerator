@@ -1,0 +1,87 @@
+{% extends 'bootstrap/base.html' %}
+{% import "bootstrap/wtf.html" as wtf %}
+
+ {% block navbar %}
+  <div class="container-fluid">
+    <div class="navbar-header">
+      <a class="navbar-brand" href="/">Spend Modeller</a>
+    </div>
+    <ul class="nav navbar-nav">
+      <li class="active"><a href="/sim/">Simulations</a></li>
+      <li><a href="/explorer/">Explorer</a></li>
+      <li><a href="/profiler/">Lifecycle Profiles</a></li>
+    </ul>
+        <ul class="nav navbar-nav navbar-right">
+      <li><a href="#"><span class="glyphicon glyphicon-user"></span> Who am I?</a></li>
+      <li><a href="#"><span class="glyphicon glyphicon-log-in"></span> Follow me</a></li>
+    </ul>
+  </div>
+{% endblock %}
+
+
+{% block content %}
+
+<div class="container-fluid"><form method="POST">
+  <table class="table table-condensed">
+
+
+    <thead><tr class="info">
+      <th>Name</th>
+      <th>Df index</th>
+      <th>Slicing</th>
+      <th>Function</th>
+      <th>Parameters</th>
+      <th>Arguments</th>
+    </tr></thead>
+
+{%for r in rulesets %}
+
+
+
+    <tbody>
+      <tr>
+        <td>{{ form[r]['rname']() }}</td>
+
+        <td>{%for i in index_dims %}          
+            <p>{{ i }}</p>
+            {% endfor %}
+        </td>        
+
+        <td>{%for i in index_dims %}          
+            <p>{{ form[r]['index_slice'][i]() }}</p>
+            {% endfor %}
+        </td>
+
+        <td>{{ form[r]['func']() }}</td>
+
+        <td>{%for p in params %}          
+            <p>{{ p }}</p>
+            {% endfor %}
+        </td>        
+
+        <td>{%for p in params %}          
+            <p>{{ form[r]['args'][p]() }}</p>
+            {% endfor %}
+        </td>
+
+      </tr>
+    </tbody>
+    {% endfor %}
+  </table>
+<p></p>
+
+{{ form.submit() }}  {{ form.csrf_token }}</form></div>
+
+{% endblock %}
+
+
+
+
+
+
+
+
+
+
+
+
