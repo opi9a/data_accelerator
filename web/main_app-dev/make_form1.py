@@ -1,57 +1,59 @@
 from flask_wtf import FlaskForm
+from wtforms import Form
 from wtforms import StringField, SubmitField, SelectField, FormField
-from forms import *
-
+# from forms import *
 import pandas as pd
 
-def make_form1(rulesets, df): #NB rulesets is the dict of underlying objects
+xForm = Form # or FlaskForm
 
-	# assumes df is correct
-	# first construct the lowest level forms for indexing and args
+def make_form1(rulesets, df, rfuncs=['r_profile', 'r_terminal', 'r_fut']): #NB rulesets is the dict of underlying objects
+								#will need to pass actual rfuncs list (just in r_funcs.py right now)	
+
+	# first make an empty form - this will be filled and returned
+	FullForm=None
+	class FullForm(xForm):
+		submit = SubmitField('calculate')
+		pass
+
+	#can also make the IndexForm ready to pass to each RuleSet - it's invariant (as a field)
+	class IndexForm(xForm):
+		pass
 
 	for i in df.index.names:
 		setattr(IndexForm, i, StringField(i.title()))
-
-	# could now build a blank RuleSetForm for each ruleset, then change after?
-	# issue is that it's the actual form structure that needs to vary 
-	# - that is, function pull down choices, and parameters
-
-	# so may need a loop to create each RuleSetForm one by one?
-	# need to be able to identify different RuleSetForms - this is new
-
-	for p in params:
-		setattr(ParamForm, p, StringField(p.title()))
-
-	# now the next level: a single ruleset
-	class RuleSetForm(FlaskForm):
-		rname = StringField()
-		index_slice = FormField(IndexForm)
-		func = SelectField('func', choices=[('r_prof','profiler1') , 
-					('r_term', 'terminal growth'), ('r_fut', 'future launches')]) 	
-		args = FormField(ParamForm) 
-	
-	# finally assemble form fields for each ruleset to give the full form
-	for r in rulesets:
-		# print(r)
-		setattr(FullForm, r, FormField(RuleSetForm, r.title()))
-
-	form = FullForm()
+		pass
 
 
-	for r in rulesets: # it's a dict of RuleSet objects
+	# now iterate through the rulesets, making RuleSet forms to add to the FullForm class
+	for rset in rulesets:
+		RuleSetForm=None # feel like would be good to re-initialise
+		class RuleSetForm(xForm):
+			#first the invariants (NB, that means the *fields* are invariant, not their contents)
+			rname = StringField(default=rset.name)
+			rfunc = SelectField('functions', choices=rfuncs)
+		
+		# add the index_slice field
+		setattr(RuleSetForm, 'index_slice', FormField(IndexForm))
 
-		# now populate them
-		# name =  name
-		# df slice from ruleset.index_slice
-		# function from function
-		# parameters from params
-		# easy! 
+		# set up a form for the parameters, to add to the RuleSet
+		ParamForm=None
+		class ParamForm(xForm):
+			pass
+
+		# check if there is a function assigned in the RuleSet object
+		if rset.func is not None:
+
+			# if so, set up ParamForm with the function parameters (just use Strings for now)
+			# NOT SURE GET_PARAMS IS RIGHT - CHECK THIS
+			for p in rset.get_params():
+				setattr(ParamForm, p, StringField(p.title())) # can set up to use specific field types idc
+			
+		# add to the RuleSetForm (an empty form if necessary)
+		setattr(RuleSetForm, 'params', FormField(ParamForm))
+
+		# add the finished RuleSetForm to the FullForm
+		setattr(FullForm, rset.name, FormField(RuleSetForm))
+
+	return FullForm 
 
 
-	# parameters depend on the function
-
-
-	for r in rulesets:
-		form[r].rname.data = r
-
-	return form
