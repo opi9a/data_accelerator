@@ -1,59 +1,65 @@
 from flask_wtf import FlaskForm
 from wtforms import Form
 from wtforms import StringField, SubmitField, SelectField, FormField
-# from forms import *
-import pandas as pd
 
-xForm = Form # or FlaskForm
+xForm = FlaskForm # or Form
 
-def make_form1(rulesets, df, rfuncs=['r_profile', 'r_terminal', 'r_fut']): #NB rulesets is the dict of underlying objects
-								#will need to pass actual rfuncs list (just in r_funcs.py right now)	
+def make_form1(rulesets, rfuncs=['','r_profile', 'r_terminal', 'r_fut']): #NB rulesets is the dict of underlying objects
+                                #will need to pass actual rfuncs list (just in r_funcs.py right now)    
 
-	# first make an empty form - this will be filled and returned
-	FullForm=None
-	class FullForm(xForm):
-		submit = SubmitField('calculate')
-		pass
+    # first make an empty form - this will be filled and returned
+    FullForm=None
+    class FullForm(xForm):
+        add_ruleset = SubmitField('Add a ruleset')
+        submit = SubmitField('Calculate')
+        new_name = StringField('new name')
+        clear_all = SubmitField('clear all')
+        
+    # can also make the IndexForm.  Fields are actually invariant within a df, 
+    # (i.e. across rulesets applied to one df) but don't yet know if a df is 
+    # available.  This way reads a new IndexForm for each ruleset.  
+    # NB this DOES ALLOW DIFFERENT DATAFRAMES - depends only on the rulesets.
+    class IndexForm(xForm):
+        pass
 
-	#can also make the IndexForm ready to pass to each RuleSet - it's invariant (as a field)
-	class IndexForm(xForm):
-		pass
+    # now iterate through the rulesets, making RuleSet forms to add to the FullForm class
+    for rset in rulesets:
+        RuleSetForm=None # feel like would be good to re-initialise
+        class RuleSetForm(xForm):
+            #first the invariants (NB, that means the *fields* are invariant, not their contents)
+            rname = StringField(default=rulesets[rset])
+            rfunc = SelectField(choices=list(zip(rfuncs,rfuncs)))
+        
+        # make and add the index_slice field
+        
+        for i in rulesets[rset].parent_df.index.names:
+            setattr(IndexForm, i, StringField(i.title()))
+            # print('setting', i)
+            pass
+        
+        setattr(RuleSetForm, 'index_slice', FormField(IndexForm))
 
-	for i in df.index.names:
-		setattr(IndexForm, i, StringField(i.title()))
-		pass
+        # set up a form for the parameters, to add to the RuleSet
+        ParamForm=None
+        class ParamForm(xForm):
+            pass
 
+        # check if there is a function assigned in the RuleSet object
+        if rulesets[rset].func is not None:
 
-	# now iterate through the rulesets, making RuleSet forms to add to the FullForm class
-	for rset in rulesets:
-		RuleSetForm=None # feel like would be good to re-initialise
-		class RuleSetForm(xForm):
-			#first the invariants (NB, that means the *fields* are invariant, not their contents)
-			rname = StringField(default=rset.name)
-			rfunc = SelectField('functions', choices=rfuncs)
-		
-		# add the index_slice field
-		setattr(RuleSetForm, 'index_slice', FormField(IndexForm))
+            # if so, set up ParamForm with the function parameters (just use Strings for now)
+            # NOT SURE GET_PARAMS IS RIGHT - CHECK THIS
+            for p in rulesets[rset].get_params():
+                setattr(ParamForm, p, StringField(p.title())) # can set up to use specific field types idc
+            
+        # add to the RuleSetForm (an empty form if necessary)
+        setattr(RuleSetForm, 'params', FormField(ParamForm))
 
-		# set up a form for the parameters, to add to the RuleSet
-		ParamForm=None
-		class ParamForm(xForm):
-			pass
-
-		# check if there is a function assigned in the RuleSet object
-		if rset.func is not None:
-
-			# if so, set up ParamForm with the function parameters (just use Strings for now)
-			# NOT SURE GET_PARAMS IS RIGHT - CHECK THIS
-			for p in rset.get_params():
-				setattr(ParamForm, p, StringField(p.title())) # can set up to use specific field types idc
-			
-		# add to the RuleSetForm (an empty form if necessary)
-		setattr(RuleSetForm, 'params', FormField(ParamForm))
-
-		# add the finished RuleSetForm to the FullForm
-		setattr(FullForm, rset.name, FormField(RuleSetForm))
-
-	return FullForm 
+        # add the finished RuleSetForm to the FullForm
+        setattr(FullForm, rulesets[rset].name, FormField(RuleSetForm))
 
 
+    return FullForm()
+
+
+    

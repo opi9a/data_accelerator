@@ -2,7 +2,7 @@
 
 import pandas as pd
 import numpy as np
-import r_funcs
+from r_funcs import *
 import projection_funcs
 import inspect
 
@@ -30,8 +30,7 @@ class RuleSet:
         if wrong_keys:
             print("These keys aren't in the index: ", wrong_keys)
 
-        else: self.index_slice = a_slice
-
+        else: self.index_slice = a_sli
 
 
     def set_args(self, a_args):
@@ -53,7 +52,11 @@ class RuleSet:
 
     def get_params(self):
         #todo: parse out in best way
-        return inspect.getfullargspec(self.func)[4]
+        if self.func==None:
+            print("no function yet")
+
+        else:
+            return inspect.getfullargspec(self.func)[4]
 
     
 
@@ -77,6 +80,7 @@ class RuleSet:
              "index_slice": self.index_slice,
              "func": self.func,
              "f_args keys": list(self.f_args.keys()),
+             "f_args": self.f_args,
              "past type": type(self.past),
              "fut type": type(self.fut),
              "join_output": self.join_output}
