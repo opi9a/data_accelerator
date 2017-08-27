@@ -64,7 +64,7 @@ def r_terminal(df, n_pers, *, term_rate_pa, debug=False):
     '''
     # make an initial np array with growth, based on index-1 = 1
 
-    term_rate_mo = term_rate_pa / 12
+    term_rate_mo = float(term_rate_pa) / 12
     x = np.array([(1+term_rate_mo)**np.arange(1,n_pers+1)]*len(df))
     ave_last = df.iloc[:,-3:].sum(axis=1)/3
     x=x*ave_last[:,None]

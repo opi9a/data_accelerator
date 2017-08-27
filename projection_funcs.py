@@ -8,7 +8,7 @@ Created on Fri Aug 11 14:50:32 2017
 import pandas as pd
 import numpy as np
 
-def get_ix_slice(df, **kwargs):
+def get_ix_slice(df, in_dict):
     '''make a pd.IndexSlice
     args:   - a dataframe (with named index)
             - index names:value pairs to be sliced (in any order)
@@ -23,7 +23,21 @@ def get_ix_slice(df, **kwargs):
        
     simply print the returned output to see what's going on
     '''
-    return tuple((kwargs.get(name, slice(None,None,None)))
+    # first turn any None entries of the input into slices
+    for i in in_dict:
+        print(' in get slice, with key ', i, " value", in_dict[i])
+        if in_dict[i] is '':
+            print('setting element to noneslice')
+            in_dict[i] = slice(None, None, None)
+            
+        # interim hack until I get Fields sorted for eg boolean
+        if in_dict[i] == 'True':
+            in_dict[i] = True
+
+        else: print('it was not none')
+    print('after processing the dict is ', in_dict)
+
+    return tuple((in_dict.get(name, slice(None,None,None)))
                      for name in df.index.names)
     
  ###_________________________________________________________________________###

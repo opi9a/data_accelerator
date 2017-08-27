@@ -17,46 +17,52 @@ toolbar = DebugToolbarExtension(app)
 
 df = pd.read_pickle('../../spend_data_proc/dfs/main_unstacked_17AUG.pkl')
 
-rs1 = RuleSet.RuleSet(df, 'rs1')
-rs2 = RuleSet.RuleSet(df, 'rs2')
 
-    # def __init__(self, parent_df, name, index_slice={}, 
-    #              func=None, f_args={}, join_output=True):
-
-
-rulesets = [rs1, rs2]
+rulesets = {}
+rulesets['rs1'] = RuleSet.RuleSet(df, 'rs1')
+rulesets['rs2'] = RuleSet.RuleSet(df, 'rs2')
 
 @app.route('/', methods=['GET', 'POST'])
 def home():
+    print("REQUEST FORM", request.form)
+    print("\nRULE SETS NAMES ", [n for n in rulesets])
 
-	try:
-		form = make_form1(rulesets, df)
-		print('\nWORKED\n')
-		print(form)
+    form = make_form1(rulesets)
+    print('\nWORKED\n')
+    print("FORM AFTER CREATION ", form.data)
 
-	except: print("DIDNT WORK")
+    for r in rulesets:
+        print("whole dict - type ", type(form[r].data), "data ",  form[r].data)
 
-	# if request.method == 'POST':
-	# 	# print("\nvalidated")
-	# 	# print("\n",form['add_ruleset'].data)
-	# 	# print(form['new_name'].data)
-		
-	# 	if form.add_ruleset.data and form.new_name.data:
-	# 		rulesets.append(form.new_name.data)
-	# 		form = make_form(rulesets, index_dims, params)
-	# 		form.new_name.data = ""
-	# 		form.add_ruleset.data = False
+        for f in form[r].data:
+                print("\n", f, "\n", form[r].data[f], end="\n")
 
-	# 	if form.clear_all.data:
-	# 		del rulesets[:]
+    if request.method == 'POST':
+        print("\nvalidated")
+        print("\nadd ruleset data",form['add_ruleset'].data)
+        print("\nadd ruleset data", form['new_name'].data)
 
+        if form.clear_all.data:
+            rulesets.clear()
 
+        if form.add_ruleset.data and form.new_name.data:
+            print('adding new ruleset ')
+            rulesets[form.new_name.data] = RuleSet.RuleSet(df,form.new_name.data)
+            print('NEW RULESETS', rulesets[form.new_name.data])
+            print('len rulesets', len(rulesets))
+            
+    
+            form = make_form1(rulesets)     
+            form['new_name'].data = ""
+            form['add_ruleset'].data = False
+    
+    for r in rulesets:
+        form[r]['rname'].data=r
+        
 
-	else: print('\nNOT VALIDATED')
-
-	return render_template('main_template.html', form=form, 
-							rulesets=rulesets, index_dims=df.index.names, params=None)
+    return render_template('main_template1.html', form=form, 
+                                rulesets=[n for n in rulesets])
 
 if __name__ == '__main__':
-	app.run()
+    app.run()
 

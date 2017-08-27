@@ -1,8 +1,12 @@
 from flask_wtf import FlaskForm
 from wtforms import Form
-from wtforms import StringField, SubmitField, SelectField, FormField
+from wtforms import StringField, SubmitField, SelectField, FormField, validators
 
 xForm = FlaskForm # or Form
+
+# need a function to take rulesets as input, and populate a form.  OR do it in the make_form
+def fill_form1():
+    pass
 
 def make_form1(rulesets, rfuncs=['','r_profile', 'r_terminal', 'r_fut']): #NB rulesets is the dict of underlying objects
                                 #will need to pass actual rfuncs list (just in r_funcs.py right now)    
@@ -10,10 +14,12 @@ def make_form1(rulesets, rfuncs=['','r_profile', 'r_terminal', 'r_fut']): #NB ru
     # first make an empty form - this will be filled and returned
     FullForm=None
     class FullForm(xForm):
-        add_ruleset = SubmitField('Add a ruleset')
-        submit = SubmitField('Calculate')
-        new_name = StringField('new name')
-        clear_all = SubmitField('clear all')
+        add_ruleset = SubmitField('Add a ruleset', default=False)
+        submit = SubmitField('update', default=False)
+        new_name = StringField('new name', default=None)
+        clear_all = SubmitField('clear all', default=False)
+        plot_all = SubmitField('plot all', default=False)
+
         
     # can also make the IndexForm.  Fields are actually invariant within a df, 
     # (i.e. across rulesets applied to one df) but don't yet know if a df is 
@@ -27,7 +33,7 @@ def make_form1(rulesets, rfuncs=['','r_profile', 'r_terminal', 'r_fut']): #NB ru
         RuleSetForm=None # feel like would be good to re-initialise
         class RuleSetForm(xForm):
             #first the invariants (NB, that means the *fields* are invariant, not their contents)
-            rname = StringField(default=rulesets[rset])
+            rname = StringField(default=rulesets[rset].name)
             rfunc = SelectField(choices=list(zip(rfuncs,rfuncs)))
         
         # make and add the index_slice field

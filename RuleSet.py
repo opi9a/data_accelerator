@@ -8,13 +8,14 @@ import inspect
 
 
 class RuleSet:
-    def __init__(self, parent_df, name, index_slice={}, 
-                 func=None, f_args={}, join_output=True):
+    def __init__(self, parent_df, name, 
+                func=None, f_args={}, join_output=True):
         self.name = name
         self.parent_df = parent_df
-        self.index_dims = self.parent_df.index.names
-        self.index_slice = index_slice
+        # initialise the index slice to the names in the parent index
+        self.index_slice = {i:"ndef" for i in parent_df.index.names}
         self.func = func
+        print("initialising f args to", f_args)
         self.f_args = f_args
         self.past = None
         self.fut = None
@@ -22,15 +23,17 @@ class RuleSet:
         self.joined = None
 
        
-    def set_slice(self, a_slice):
-        '''Set the index_slice dictionary'''
+    def set_slice(self, input_slice):
+        '''Set the index_slice dictionary.
 
-        wrong_keys = [k for k in a_slice.keys() 
-                        if k not in self.index_dims]
-        if wrong_keys:
-            print("These keys aren't in the index: ", wrong_keys)
+        Takes a dictionary input, and sets matching elements in self.index_slice
+        to equal the values in the input_slice'''
 
-        else: self.index_slice = a_sli
+        for k in input_slice:
+            if k in self.index_slice:
+                self.index_slice[k] = input_slice[k]
+            else:
+                print('{', k, ':', input_slice[k], '} not in index')
 
 
     def set_args(self, a_args):
@@ -39,6 +42,7 @@ class RuleSet:
         if self.func==None:
             print("no function yet")
             return
+
 
         wrong_keys = [k for k in a_args.keys() 
                         if k not in inspect.getfullargspec(self.func)[4]]
@@ -61,22 +65,32 @@ class RuleSet:
     
 
     def xtrap(self, n_pers):
-        self.past = self.parent_df.loc[projection_funcs.get_ix_slice(
-                        self.parent_df, **self.index_slice),:]
-        self.fut = self.func(self.past, n_pers, **self.f_args)
+        print("calling xtrap")
+        if self.func == None:
+            print("no function assigned")
+            return
+        print("about to pass ", self.index_slice)
+        print("of type ", type(self.index_slice))
+        print("and the args are ", self.f_args)
+        print("the slice is ", projection_funcs.get_ix_slice(self.parent_df, self.index_slice))
+
+        self.past = self.parent_df.loc[projection_funcs.get_ix_slice(self.parent_df, self.index_slice),:]
         
+        self.fut = self.func(self.past, n_pers, **self.f_args)
+            
         if self.join_output:
             try:
                 self.joined = self.past.join(self.fut)
             except:
                 self.joined = pd.DataFrame(pd.concat([self.past.sum(),self.fut.sum()]), 
-                                            columns=['joined']).T
+                                                columns=['joined']).T
+
+        # except: print("looks like don't have arguments or something")
 
         
     def __repr__(self):
         outlist = []
         self._info = {"name": self.name,
-             "index_dims": self.index_dims,
              "index_slice": self.index_slice,
              "func": self.func,
              "f_args keys": list(self.f_args.keys()),

@@ -15,8 +15,7 @@ df = pd.read_pickle('../../spend_data_proc/dfs/main_unstacked_17AUG.pkl')
 # print(df.head())
 
 rulesets = []
-df_index = df.index.names
-index_dims = df_index #['a', 'b']
+index_dims = df.index.names
 
 params = ['profile', 'gen_mult']
 
@@ -28,7 +27,6 @@ def home():
 	form = make_form(rulesets, index_dims, params)
 	print("Rulesets are ", rulesets)
 	print("index_dims are ", index_dims)
-	print("df_names are ", df_index)
 
 	if request.method == 'POST':
 		print("\nvalidated")
@@ -38,7 +36,7 @@ def home():
 		if form.add_ruleset.data and form.new_name.data:
 			rulesets.append(form.new_name.data)
 			form = make_form(rulesets, index_dims, params)
-			form.new_name.data = ""
+			form.new_name = ""
 			form.add_ruleset.data = False
 
 		if form.clear_all.data:
