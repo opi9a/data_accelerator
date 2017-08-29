@@ -8,12 +8,12 @@ import inspect
 
 
 class RuleSet:
-    def __init__(self, parent_df, name, 
+    def __init__(self, parent_df, name, index_slice=None,
                 func=None, f_args={}, join_output=True):
         self.name = name
         self.parent_df = parent_df
         # initialise the index slice to the names in the parent index
-        self.index_slice = {i:"ndef" for i in parent_df.index.names}
+        self.index_slice = {i:None for i in parent_df.index.names}
         self.func = func
         print("initialising f args to", f_args)
         self.f_args = f_args
@@ -38,11 +38,10 @@ class RuleSet:
 
     def set_args(self, a_args):
         '''Set the f_args dictionary - passed to self.func()'''
-
+        print('[RuleSet class] calling set_args')
         if self.func==None:
             print("no function yet")
             return
-
 
         wrong_keys = [k for k in a_args.keys() 
                         if k not in inspect.getfullargspec(self.func)[4]]

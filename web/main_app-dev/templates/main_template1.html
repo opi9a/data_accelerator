@@ -1,6 +1,10 @@
 {% extends 'bootstrap/base.html' %}
 {% import "bootstrap/wtf.html" as wtf %}
 
+{% block meta %}
+
+{% endblock %}
+
  {% block navbar %}
   <div class="container-fluid">
     <div class="navbar-header">
@@ -32,6 +36,7 @@
       <th>Function</th>
       <th>Parameters</th>
       <th>Arguments</th>
+      <th></th>
     </tr></thead>
 
   {%for r in rulesets %}
@@ -61,29 +66,20 @@
             {% endfor %}
         </td>        
 
-
-
+        <td><p>{{ form[r].delete_ruleset }}</p>
+            <p>{{ form[r].add_ruleset_to_plot }}</p>
+            <p>{{ form[r].save_ruleset }}</p></td>
       </tr>
     </tbody>
   {% endfor %}
   </table>
-
-  <p>{{ wtf.form_field(form.submit, class="btn btn-success pull-left") }} </p>
+  <div><img src= {{ outfig }} >
+  <p align="right">{{ wtf.form_field(form.submit, class="btn btn-success") }}  {{ wtf.form_field(form.add_ruleset, class="btn btn-primary") }} {{ form.new_name() }}  {{ wtf.form_field(form.load_ruleset, class="btn btn-warning") }} {{ form.load_name() }} {{ wtf.form_field(form.clear_all, class="btn btn-danger") }} {{ wtf.form_field(form.plot_all, class="btn btn-default") }} </p>
   <p></p>
 
-
-  <p align="right">{{ wtf.form_field(form.add_ruleset, class="btn btn-primary") }}</p>
-
-
-  <p align="right">{{ form.new_name() }}</p>
-
-  <p align="left">{{ wtf.form_field(form.clear_all, class="btn btn-danger") }} </p>
-  <p></p>
-
-  <p>{{ wtf.form_field(form.plot_all, class="btn btn-default pull-left") }} </p>
-  <p></p>
-
-</form></div>
+</form>
+<p>SOURCE FILE {{ outfig }}</p>
+</div>
 
 {% endblock %}
 

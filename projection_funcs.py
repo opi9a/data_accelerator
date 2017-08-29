@@ -8,6 +8,28 @@ Created on Fri Aug 11 14:50:32 2017
 import pandas as pd
 import numpy as np
 
+
+def variablise(string):
+    
+    if string.strip().lower() == 'true':
+        return True
+    elif string.strip().lower() == 'false':
+        return False
+    
+    else:
+        try: 
+            return int(string)
+        except:
+            try:
+                return float(string)
+            except:
+                try:
+                    return pd.Period(string)
+                except: return string
+
+ ###_________________________________________________________________________###
+
+
 def get_ix_slice(df, in_dict):
     '''make a pd.IndexSlice
     args:   - a dataframe (with named index)
@@ -26,7 +48,7 @@ def get_ix_slice(df, in_dict):
     # first turn any None entries of the input into slices
     for i in in_dict:
         print(' in get slice, with key ', i, " value", in_dict[i])
-        if in_dict[i] is '':
+        if in_dict[i] is '' or in_dict[i] is None:
             print('setting element to noneslice')
             in_dict[i] = slice(None, None, None)
             

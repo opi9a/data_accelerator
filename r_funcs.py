@@ -3,6 +3,8 @@ import pandas as pd
 import numpy as np
 import projection_funcs
 
+profs_table={'prof1':'c:/Users/groberta/Work/data_accelerator/profiles/prof1.csv'}
+
 ##_________________________________________________________________________##
 
 '''Suite of functions with common API which can be passed to a RuleSet object
@@ -23,6 +25,12 @@ def r_profile(df, n_pers,
             
     return: df (or series - future)
     '''
+    # first, if the passed profile is a string, retrieve the array
+    if isinstance(profile, str):
+        print("it's a string, so retrieving array")
+        profile = np.genfromtxt(profs_table[profile])
+        print(profile)
+
     out=[]
 
     for row in df.itertuples():
@@ -81,9 +89,19 @@ def r_terminal(df, n_pers, *, term_rate_pa, debug=False):
 
 def r_fut(df, n_pers, *, profile, cutoff_date,
           coh_growth, term_growth, name='future', debug=False):
+    
+    # check if profile is an array yet
+    if isinstance(profile, str):
+        print("it's a string, so retrieving array")
+        profile = np.genfromtxt(profs_table[profile])
+        print(profile)
+
+
     # work out what l_start and l_stop should be, and how passed to get_forecast()
 
     # sum the df, as we don't care about individual products.  NB it's now a Series
+    
+    cutoff_date = pd.Period(cutoff_date)
     df=df.sum()
     last_date = df.index[-1]
 

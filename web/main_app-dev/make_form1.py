@@ -18,7 +18,9 @@ def make_form1(rulesets, rfuncs=['','r_profile', 'r_terminal', 'r_fut']): #NB ru
         submit = SubmitField('update', default=False)
         new_name = StringField('new name', default=None)
         clear_all = SubmitField('clear all', default=False)
-        plot_all = SubmitField('plot all', default=False)
+        plot_all = SubmitField('plot all')
+        load_ruleset = SubmitField('load a ruleset')
+        load_name = StringField('load name', default=None)
 
         
     # can also make the IndexForm.  Fields are actually invariant within a df, 
@@ -35,6 +37,9 @@ def make_form1(rulesets, rfuncs=['','r_profile', 'r_terminal', 'r_fut']): #NB ru
             #first the invariants (NB, that means the *fields* are invariant, not their contents)
             rname = StringField(default=rulesets[rset].name)
             rfunc = SelectField(choices=list(zip(rfuncs,rfuncs)))
+            delete_ruleset = SubmitField('delete ruleset', default=False)
+            add_ruleset_to_plot = SubmitField('add ruleset to plot', default=False)
+            save_ruleset = SubmitField('save ruleset', default=False)
         
         # make and add the index_slice field
         
