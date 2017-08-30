@@ -1,6 +1,7 @@
 from flask_wtf import FlaskForm
 from wtforms import Form
 from wtforms import StringField, SubmitField, SelectField, FormField, validators
+import os
 
 xForm = FlaskForm # or Form
 
@@ -20,7 +21,8 @@ def make_form1(rulesets, rfuncs=['','r_profile', 'r_terminal', 'r_fut']): #NB ru
         clear_all = SubmitField('clear all', default=False)
         plot_all = SubmitField('plot all')
         load_ruleset = SubmitField('load a ruleset')
-        load_name = StringField('load name', default=None)
+        load_name = SelectField(choices=[("","")] + list(zip(os.listdir('rulesets/'),os.listdir('rulesets/'))))
+        dump_all_to_csv = SubmitField('dump to csv')
 
         
     # can also make the IndexForm.  Fields are actually invariant within a df, 

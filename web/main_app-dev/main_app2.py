@@ -5,7 +5,7 @@ from make_form1 import make_form1
 
 import RuleSet
 import r_funcs
-from projection_funcs import variablise
+from projection_funcs import variablise, slicify
 
 import pandas as pd
 import numpy as np
@@ -14,6 +14,7 @@ plt.style.use('ggplot')
 import pprint as pprint
 from datetime import datetime
 import pickle
+import os
 
 app = Flask(__name__)
 bootstrap = Bootstrap(app)
@@ -101,7 +102,12 @@ def home():
             print("f_args in ruleset:".ljust(pad1), rulesets[r].f_args)
 
             # now set the index slices
-            print("the slice".ljust(pad1), form[r]['index_slice'].data)
+            print("setting the slice".ljust(pad1), form[r]['index_slice'].data)
+            for i in form[r]['index_slice'].data:
+                print("in element ".ljust(pad1), i)
+                form[r]['index_slice'][i].data = slicify(form[r]['index_slice'][i].data)
+
+            # now write to the ruleset
             rulesets[r].index_slice = form[r]['index_slice'].data
             del rulesets[r].index_slice['csrf_token']
 
@@ -122,7 +128,7 @@ def home():
 
 
         print("\nCHECKING FOR RULESETS TO LOAD")     
-        # loads them, but they get blanked
+        # loads them, but fields get blanked when form is remade -so need to add after
         print(form.load_ruleset.data, form.load_name.data)
         if form.load_ruleset.data and form.load_name.data:
             print('loading ruleset:'.ljust(pad1), form.load_name.data)
@@ -155,13 +161,16 @@ def home():
             rulesets[r].xtrap(npers)
             # print(rulesets[r].joined.head())
             pd.DataFrame(rulesets[r].joined).to_csv('output/df1.csv')
-
-            out_dfs.append(rulesets[r].joined)
+            print('info on ', r, ':'.ljust(pad1), rulesets[r].summed.info())
+            out_dfs.append(rulesets[r].summed)
+            print('length of out_dfs:'.ljust(pad1), len(out_dfs))
 
         try:
-            df_concat = pd.concat(out_dfs)
+            print('out_df list is: '.ljust(pad1), out_dfs)
+            df_concat = pd.concat(out_dfs, axis=1)
+            print('concatted, with shape '.ljust(pad1), len(df_concat))
             df_concat.to_csv('output/dfconcat.csv')
-            fig = df_concat.T.plot(legend=False).get_figure()
+            fig = df_concat.plot(kind='Area', stacked='True', legend=True).get_figure()
             ts = int((datetime.now() - datetime(1970,1,1)).total_seconds())
             outfig = str('static/outfig' + str(ts) + '.png')
             fig.savefig(outfig)
@@ -183,7 +192,7 @@ def home():
     form = None
     form = make_form1(rulesets)
 
-    # this seems very redundant with bit above where load in the ruleset, but otherwise form overwrites
+    # this seems redundant with bit above but needs to happen after form remade, which blanks fields
     if form.load_ruleset.data and form.load_name.data:
         print("trying to write form")
         f = form.load_name.data.split('.')[0]
@@ -204,6 +213,8 @@ def home():
         print('looking up ruleset func in func_table', 
             [k for k in func_table if func_table[k]==rulesets[f].func][0])
         form[f]['rfunc'].data = [k for k in func_table if func_table[k]==rulesets[f].func][0]
+        form.load_ruleset.data = False
+        form.load_name.data = ""
 
     
     pprint.pprint(form.data)

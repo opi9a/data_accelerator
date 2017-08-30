@@ -27,7 +27,60 @@ def variablise(string):
                     return pd.Period(string)
                 except: return string
 
+
  ###_________________________________________________________________________###
+
+
+def slicify(in_string):
+    '''
+    Processes index_slice input strings from web form into variables useable by 
+    get_ix_slice. 
+    '''
+    print('calling slicify on ', in_string)
+
+    if in_string == "" or in_string == None:
+        return slice(None, None, None)
+
+    # see if string can be variablised (is a bool, float, int or pd.Period)
+    v = variablise(in_string)
+    if not isinstance(v, str):
+        print("..variablised as ", type(v))
+        return v
+    
+    # now deal with list-likes
+    if in_string.strip()[0] == "[" and in_string.strip()[-1] == "]":
+        out_list = [variablise(i) for i in in_string.strip()[1:-1].split(',')]
+        print("..listified as ", out_list)
+        return out_list
+    
+    # finally deal with slices
+    if in_string.strip().startswith('slice:'):
+        print('looks like a slice.. ', end = "")
+        slice_out = in_string[6:].strip().split(' ')
+        
+        if slice_out[0] == 'to':
+            print(' with to only')
+            return slice(None, variablise(slice_out[1]),None)
+
+        if slice_out[-1] == 'to':
+            print(' with from and to')
+            return slice(variablise(slice_out[0]),None,None)
+
+        if slice_out[1] == 'to' and len(slice_out)==3:
+            print(' with from only')
+            return slice(variablise(slice_out[0]),variablise(slice_out[2]),None)
+        
+        else:
+            print('could not slicify slice ', in_string)
+
+    else:
+        print('could not slicify string ', in_string)
+
+
+
+###_________________________________________________________________________###
+
+
 
 
 def get_ix_slice(df, in_dict):
@@ -52,10 +105,6 @@ def get_ix_slice(df, in_dict):
             print('setting element to noneslice')
             in_dict[i] = slice(None, None, None)
             
-        # interim hack until I get Fields sorted for eg boolean
-        if in_dict[i] == 'True':
-            in_dict[i] = True
-
         else: print('it was not none')
     print('after processing the dict is ', in_dict)
 

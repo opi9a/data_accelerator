@@ -21,6 +21,7 @@ class RuleSet:
         self.fut = None
         self.join_output=join_output
         self.joined = None
+        self.summed = None
 
        
     def set_slice(self, input_slice):
@@ -80,9 +81,12 @@ class RuleSet:
         if self.join_output:
             try:
                 self.joined = self.past.join(self.fut)
+                self.summed = pd.DataFrame(self.joined.sum(), columns=[self.name])
             except:
-                self.joined = pd.DataFrame(pd.concat([self.past.sum(),self.fut.sum()]), 
-                                                columns=['joined']).T
+                self.joined = self.summed = pd.DataFrame(pd.concat([self.past.sum(),self.fut.sum()]), 
+                                                columns=[self.name])
+
+         
 
         # except: print("looks like don't have arguments or something")
 
@@ -96,6 +100,8 @@ class RuleSet:
              "f_args": self.f_args,
              "past type": type(self.past),
              "fut type": type(self.fut),
+             "joined type": type(self.joined),
+             "summed type": type(self.summed),
              "join_output": self.join_output}
         for key in self._info:
             temp_string = key.ljust(27) + str(self._info[key]).rjust(10)

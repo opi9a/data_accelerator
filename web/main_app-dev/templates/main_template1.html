@@ -73,8 +73,8 @@
     </tbody>
   {% endfor %}
   </table>
-  <div><img src= {{ outfig }} >
-  <p align="right">{{ wtf.form_field(form.submit, class="btn btn-success") }}  {{ wtf.form_field(form.add_ruleset, class="btn btn-primary") }} {{ form.new_name() }}  {{ wtf.form_field(form.load_ruleset, class="btn btn-warning") }} {{ form.load_name() }} {{ wtf.form_field(form.clear_all, class="btn btn-danger") }} {{ wtf.form_field(form.plot_all, class="btn btn-default") }} </p>
+  <div class='row text-center'><img src={{ outfig }}></div>
+  <div><p align="right">{{ wtf.form_field(form.submit, class="btn btn-success") }}  {{ wtf.form_field(form.add_ruleset, class="btn btn-primary") }} {{ form.new_name() }}  {{ wtf.form_field(form.load_ruleset, class="btn btn-warning") }} {{ form.load_name() }} {{ wtf.form_field(form.clear_all, class="btn btn-danger") }} {{ wtf.form_field(form.plot_all, class="btn btn-default") }} </p>
   <p></p>
 
 </form>
