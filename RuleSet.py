@@ -83,7 +83,7 @@ class RuleSet:
                 self.joined = self.past.join(self.fut)
                 self.summed = pd.DataFrame(self.joined.sum(), columns=[self.name])
             except:
-                self.joined = self.summed = pd.DataFrame(pd.concat([self.past.sum(),self.fut.sum()]), 
+                self.joined = self.summed = pd.DataFrame(self.past.sum().append(self.fut).sum(axis=1), 
                                                 columns=[self.name])
 
          
