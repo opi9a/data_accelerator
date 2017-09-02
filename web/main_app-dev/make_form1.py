@@ -42,6 +42,7 @@ def make_form1(rulesets, rfuncs=['','r_profile', 'r_terminal', 'r_fut']): #NB ru
             delete_ruleset = SubmitField('delete ruleset', default=False)
             add_ruleset_to_plot = SubmitField('add ruleset to plot', default=False)
             save_ruleset = SubmitField('save ruleset', default=False)
+            dump_rset_to_xls = SubmitField('dump to xls', default=False)
         
         # make and add the index_slice field
         

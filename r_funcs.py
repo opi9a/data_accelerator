@@ -88,8 +88,11 @@ def r_terminal(df, n_pers, *, term_rate_pa, debug=False):
 ##_________________________________________________________________________##
 
 def r_fut(df, n_pers, *, profile, cutoff_date,
-          coh_growth, term_growth, name='future', debug=False):
+          coh_growth_pa, term_growth_pa, name='future', debug=False):
     
+    coh_growth = coh_growth_pa /12
+    term_growth = term_growth_pa /12
+
     # check if profile is an array yet
     if isinstance(profile, str):
         print("it's a string, so retrieving array")
