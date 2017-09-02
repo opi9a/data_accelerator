@@ -160,15 +160,11 @@ def home():
 
             print("f_args in ruleset:".ljust(pad1), rulesets[r].f_args)
 
-            #     - now set the index slices.  Again need some processing first, to slicify them
-            print("setting the slice".ljust(pad1), form[r]['index_slice'].data)
-            for i in form[r]['index_slice'].data:
-                print("in element ".ljust(pad1), i)
-                form[r]['index_slice'][i].data = slicify(form[r]['index_slice'][i].data)
+            #     - now set the index slice strings.  
 
-            #     - now write to the ruleset
-            rulesets[r].index_slice = form[r]['index_slice'].data
-            del rulesets[r].index_slice['csrf_token']
+            rulesets[r].string_slice = form[r]['string_slice'].data
+            del rulesets[r].string_slice['csrf_token']
+            rulesets[r].slicify_string()
 
             # save if required
             print("checking if save")
@@ -242,7 +238,7 @@ def home():
             df_concat = pd.concat(out_dfs, axis=1)
             print('concatted, with shape '.ljust(pad1), len(df_concat))
             df_concat.to_csv('output/dfconcat.csv')
-            fig = df_concat.plot(kind='Area', stacked='True', legend=True).get_figure()
+            fig = df_concat.plot(kind='Area', stacked='True', legend=True, figsize=(12,5)).get_figure()
             ts = int((datetime.now() - datetime(1970,1,1)).total_seconds())
             outfig = str('static/outfig' + str(ts) + '.png')
             fig.savefig(outfig)
@@ -271,10 +267,10 @@ def home():
         print(rulesets[f])
         form[f]['rname'].data = rulesets[f].name
 
-        for i in rulesets[f].index_slice:
+        for i in rulesets[f].string_slice:
             print("..in parameter".ljust(pad1), i)
-            print("..current contents:".ljust(pad1), form[f]['index_slice'][i].data)
-            form[f]['index_slice'][i].data = rulesets[f].index_slice[i]
+            print("..current contents:".ljust(pad1), form[f]['string_slice'][i].data)
+            form[f]['string_slice'][i].data = rulesets[f].string_slice[i]
 
         for p in rulesets[f].f_args:
             print("..in parameter".ljust(pad1), p)

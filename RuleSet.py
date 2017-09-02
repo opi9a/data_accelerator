@@ -3,17 +3,25 @@
 import pandas as pd
 import numpy as np
 from r_funcs import *
-import projection_funcs
+from projection_funcs import get_ix_slice, slicify, variablise
 import inspect
 
 
 class RuleSet:
-    def __init__(self, parent_df, name, index_slice=None,
+    def __init__(self, parent_df, name, string_slice=None, index_slice=None,
                 func=None, f_args={}, join_output=True):
         self.name = name
         self.parent_df = parent_df
+        
         # initialise the index slice to the names in the parent index
-        self.index_slice = {i:None for i in parent_df.index.names}
+        if index_slice is None:
+            self.index_slice = {i:None for i in parent_df.index.names}
+        else:
+            self.index_slice = index_slice
+
+        # string slice holds slicing info in format used by input form
+        self.string_slice = string_slice
+
         self.func = func
         print("initialising f args to", f_args)
         self.f_args = f_args
@@ -35,6 +43,11 @@ class RuleSet:
                 self.index_slice[k] = input_slice[k]
             else:
                 print('{', k, ':', input_slice[k], '} not in index')
+
+
+    def slicify_string(self):
+        for i in self.index_slice:
+             self.index_slice[i] = slicify(self.string_slice[i])
 
 
     def set_args(self, a_args):
@@ -72,9 +85,9 @@ class RuleSet:
         print("about to pass ", self.index_slice)
         print("of type ", type(self.index_slice))
         print("and the args are ", self.f_args)
-        print("the slice is ", projection_funcs.get_ix_slice(self.parent_df, self.index_slice))
+        print("the slice is ", get_ix_slice(self.parent_df, self.index_slice))
 
-        self.past = self.parent_df.loc[projection_funcs.get_ix_slice(self.parent_df, self.index_slice),:]
+        self.past = self.parent_df.loc[get_ix_slice(self.parent_df, self.index_slice),:]
         
         self.fut = self.func(self.past, n_pers, **self.f_args)
             
@@ -94,6 +107,7 @@ class RuleSet:
     def __repr__(self):
         outlist = []
         self._info = {"name": self.name,
+             "string_slice": self.string_slice,
              "index_slice": self.index_slice,
              "func": self.func,
              "f_args keys": list(self.f_args.keys()),

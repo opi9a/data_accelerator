@@ -25,11 +25,11 @@ def make_form1(rulesets, rfuncs=['','r_profile', 'r_terminal', 'r_fut']): #NB ru
         dump_all_to_csv = SubmitField('dump to csv')
 
         
-    # can also make the IndexForm.  Fields are actually invariant within a df, 
+    # can also make the StringSliceForm.  Fields are actually invariant within a df, 
     # (i.e. across rulesets applied to one df) but don't yet know if a df is 
-    # available.  This way reads a new IndexForm for each ruleset.  
+    # available.  This way reads a new StringSliceForm for each ruleset.  
     # NB this DOES ALLOW DIFFERENT DATAFRAMES - depends only on the rulesets.
-    class IndexForm(xForm):
+    class StringSliceForm(xForm):
         pass
 
     # now iterate through the rulesets, making RuleSet forms to add to the FullForm class
@@ -44,14 +44,14 @@ def make_form1(rulesets, rfuncs=['','r_profile', 'r_terminal', 'r_fut']): #NB ru
             save_ruleset = SubmitField('save ruleset', default=False)
             dump_rset_to_xls = SubmitField('dump to xls', default=False)
         
-        # make and add the index_slice field
+        # make and add the string_slice field
         
         for i in rulesets[rset].parent_df.index.names:
-            setattr(IndexForm, i, StringField(i.title()))
+            setattr(StringSliceForm, i, StringField(i.title()))
             # print('setting', i)
             pass
         
-        setattr(RuleSetForm, 'index_slice', FormField(IndexForm))
+        setattr(RuleSetForm, 'string_slice', FormField(StringSliceForm))
 
         # set up a form for the parameters, to add to the RuleSet
         ParamForm=None

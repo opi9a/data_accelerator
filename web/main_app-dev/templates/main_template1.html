@@ -44,12 +44,12 @@
       <tr>
         <td>{{ form[r]['rname'].data }}</td>
 
-        <td>{%for i in form[r]['index_slice'].data if i != 'csrf_token'%}          
+        <td>{%for i in form[r]['string_slice'].data if i != 'csrf_token'%}          
             <p style="height: 18px">{{ i }}</p>
             {% endfor %}
         </td>   
 
-        <td>{%for i in form[r]['index_slice'] %}          
+        <td>{%for i in form[r]['string_slice'] %}          
             <p style="height: 18px">{{ i }}</p>
             {% endfor %}
         </td>   
