@@ -71,10 +71,11 @@ def slicify(in_string):
             return slice(variablise(slice_out[0]),variablise(slice_out[2]),None)
         
         else:
-            print('could not slicify slice ', in_string)
+            print('could not slicify slice.  Returning nothing from slicify()', in_string)
 
     else:
-        print('could not slicify string ', in_string)
+        print('could not slicify string, returning unprocessed ', in_string)
+        return in_string
 
 
 

@@ -5,7 +5,23 @@
 
 {% endblock %}
 
- {% block navbar %}
+{% block head %}
+{{ super() }}
+
+<head>
+<!-- can't seem to get it to pick jquery up locally, so using cdn for now -->
+<!-- <head><script src="jquery-3.2.1.min.js"></script></head> -->
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
+
+<link rel="stylesheet" type="text/css" href="mystyle.css">
+</head>
+
+
+
+
+{% endblock %}
+
+{% block navbar %}
   <div class="container-fluid">
     <div class="navbar-header">
       <a class="navbar-brand" href="/">Spend Modeller</a>
@@ -25,11 +41,25 @@
 
 {% block content %}
 
+
+<!-- first print out list of rulesets, plus total element -->
+
+<div class="container-fluid top_background">
+<p></p>
+  {% for r in rulesets %}
+  <button id={{ r }} class='top_button'>{{ r }}</button>
+  {% endfor %}
+  <button id="total" class='top_button'>Total</button>
+
+</div>
+
+
+
 <div class="container-fluid"><form method="POST">{{ form.csrf_token() }}
 
   <table class="table table-condensed">
 
-    <thead><tr class="info">
+<!--     <thead><tr class="info">
       <th>Name</th>
       <th>Df index</th>
       <th>Slicing</th>
@@ -37,10 +67,10 @@
       <th>Parameters</th>
       <th>Arguments</th>
       <th></th>
-    </tr></thead>
+    </tr></thead> -->
 
   {%for r in rulesets %}
-    <tbody>
+    <tbody id={{ "rset_"+r }} class="rset_rows">
       <tr>
         <td>{{ form[r]['rname'].data }}</td>
 
@@ -75,15 +105,59 @@
   {% endfor %}
   </table>
   <div class='row text-center'><img src={{ outfig }}></div>
-  <div><p align="right">{{ wtf.form_field(form.submit, class="btn btn-success") }}  {{ wtf.form_field(form.add_ruleset, class="btn btn-primary") }} {{ form.new_name() }}  {{ wtf.form_field(form.load_ruleset, class="btn btn-warning") }} {{ form.load_name() }} {{ wtf.form_field(form.clear_all, class="btn btn-danger") }} {{ wtf.form_field(form.plot_all, class="btn btn-default") }} </p>
+  <div><p align="right" class="bottom_background">{{ wtf.form_field(form.submit, class="bottom_button") }}  {{ wtf.form_field(form.add_ruleset, class="bottom_button") }} {{ form.new_name() }}  {{ wtf.form_field(form.load_ruleset, class="bottom_button") }} {{ form.load_name() }} {{ wtf.form_field(form.clear_all, class="bottom_button") }} {{ wtf.form_field(form.plot_all, class="bottom_button") }} </p>
   <p></p>
 
 </form>
-<p>SOURCE FILE {{ outfig }}</p>
 </div>
 
-{% endblock %}
 
+<script>
+
+$(document).ready(function(){
+
+    $(".top_button").click(function(){
+      $('.rset_rows').hide();
+      var active_rset = $(this).attr('id');
+      $('#rset_' + active_rset).fadeIn();      
+      $(this).css("background-color","white");
+    });
+
+});
+</script>
+
+<style>
+.top_button {
+    text-align: center;
+    border-style: none;
+
+    margin-bottom: 0px;
+    margin-left: 0px;
+    margin-right: 0px;
+    background-color: #f0f0f0;
+}
+
+.bottom_button {
+    text-align: center;
+    /*border-style: none;*/
+    background-color: #cccccc;
+}
+
+.top_background {
+    background: #f0f0f0;
+} 
+
+.bottom_background {
+    background:#f0f0f0;
+} 
+
+.rset_rows {
+    display: none;
+}
+
+</style>
+
+{% endblock %}
 
 
 
