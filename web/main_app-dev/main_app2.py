@@ -10,7 +10,6 @@ from projection_funcs import variablise, slicify
 import pandas as pd
 import numpy as np
 from matplotlib import pyplot as plt
-plt.style.use('ggplot')
 import pprint as pprint
 from datetime import datetime
 import pickle
@@ -238,7 +237,9 @@ def home():
             df_concat = pd.concat(out_dfs, axis=1)
             print('concatted, with shape '.ljust(pad1), len(df_concat))
             df_concat.to_csv('output/dfconcat.csv')
-            fig = df_concat.plot(kind='Area', stacked='True', legend=True, figsize=(12,5)).get_figure()
+            fig = df_concat.plot(kind='Area', stacked='True', legend=True, 
+                figsize=(5,3), alpha=0.5).get_figure()
+            
             ts = int((datetime.now() - datetime(1970,1,1)).total_seconds())
             outfig = str('static/outfig' + str(ts) + '.png')
             fig.savefig(outfig)
@@ -293,6 +294,10 @@ def home():
 
     return render_template('main_template1.html', form=form, 
                                 rulesets=[n for n in rulesets], outfig=outfig)
+
+@app.route('/test/')
+def test():
+    return render_template('tests.html')
 
 if __name__ == '__main__':
     app.run()

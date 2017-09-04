@@ -30,6 +30,8 @@
       <li class="active"><a href="/sim/">Simulations</a></li>
       <li><a href="/explorer/">Explorer</a></li>
       <li><a href="/profiler/">Lifecycle Profiles</a></li>
+      <li><a href="/test/">test</a></li>
+
     </ul>
         <ul class="nav navbar-nav navbar-right">
       <li><a href="#"><span class="glyphicon glyphicon-user"></span> Who am I?</a></li>
@@ -41,86 +43,98 @@
 
 {% block content %}
 
-
 <!-- first print out list of rulesets, plus total element -->
 
 <div class="container-fluid top_background">
-<p></p>
+  <p></p>
   {% for r in rulesets %}
   <button id={{ r }} class='top_button'>{{ r }}</button>
   {% endfor %}
   <button id="total" class='top_button'>Total</button>
-
 </div>
 
 
 
-<div class="container-fluid"><form method="POST">{{ form.csrf_token() }}
-
-  <table class="table table-condensed">
-
-<!--     <thead><tr class="info">
-      <th>Name</th>
-      <th>Df index</th>
-      <th>Slicing</th>
-      <th>Function</th>
-      <th>Parameters</th>
-      <th>Arguments</th>
-      <th></th>
-    </tr></thead> -->
-
+<div class="container-fluid main_container"><form method="POST">{{ form.csrf_token() }}
   {%for r in rulesets %}
-    <tbody id={{ "rset_"+r }} class="rset_rows">
-      <tr>
-        <td>{{ form[r]['rname'].data }}</td>
+  <div class="row rset_rows1" id={{ "rset_"+r }} style="min-height: 300px">
+      <div class="col-md-1">
+          {%for i in form[r]['string_slice'].data if i != 'csrf_token'%}          
+          <div><p style="height: 18px">{{ i }}</p></div>
+          {% endfor %}
+      </div>
 
-        <td>{%for i in form[r]['string_slice'].data if i != 'csrf_token'%}          
-            <p style="height: 18px">{{ i }}</p>
-            {% endfor %}
-        </td>   
+      <div class="col-md-1">
+          {%for i in form[r]['string_slice'] %}         
+          <div><p style="height: 18px">{{ i(class_="ix_field") }}</p></div>
+          {% endfor %}
+      </div>
 
-        <td>{%for i in form[r]['string_slice'] %}          
-            <p style="height: 18px">{{ i }}</p>
-            {% endfor %}
-        </td>   
-        
-        <td>{{ form[r]['rfunc']() }}</td>
+      <div class="col-md-1">
+          <p style="height: 18px">Function: </p>
+          {%for p in form[r]['params'].data if p != 'csrf_token' %}           
+          <div><p style="height: 18px">{{ p }}</p></div>
+          {% endfor %}
+      </div>
 
-        <td>{%for p in form[r]['params'].data if p != 'csrf_token' %}          
-            <p style="height: 18px">{{ p }}</p>
-            {% endfor %}
-        </td>                
+      <div class="col-md-1">
+          <p style="height: 18px">{{ form[r]['rfunc'](class_="ix_field") }}</p>
+          {%for p in form[r]['params'] %}          
+            <p style="height: 18px">{{ p(class_="ix_field") }}</p>
+          {% endfor %}
+      </div>
 
-        <td>{%for p in form[r]['params'] %}          
-            <p style="height: 18px">{{ p }}</p>
-            {% endfor %}
-        </td>        
 
-        <td><p>{{ form[r].delete_ruleset }}</p>
-            <p>{{ form[r].add_ruleset_to_plot }}</p>
-            <p>{{ form[r].save_ruleset }}</p>
-            <p>{{ form[r].dump_rset_to_xls }}</p></td>
-      </tr>
-    </tbody>
+      <div class="col-md-8">
+        <img src={{ outfig }}>
+      </div>
+  </div>
+
+  <div class="row rset_rows2 no-gutters" id={{ "rset_buttons_"+r }}>
+
+          <button class="mid_button">{{ wtf.form_field(form[r].delete_ruleset, class="mid_button") }}</button>
+          <button class="mid_button">{{ wtf.form_field(form[r].add_ruleset_to_plot, class="mid_button") }}</button>
+          <button class="mid_button" >{{ wtf.form_field(form[r].save_ruleset, class="mid_button") }}</button>
+          <button class="mid_button">{{ wtf.form_field(form[r].dump_rset_to_xls, class="mid_button") }}</button>
+
+  </div>
+
+  
+
   {% endfor %}
-  </table>
-  <div class='row text-center'><img src={{ outfig }}></div>
-  <div><p align="right" class="bottom_background">{{ wtf.form_field(form.submit, class="bottom_button") }}  {{ wtf.form_field(form.add_ruleset, class="bottom_button") }} {{ form.new_name() }}  {{ wtf.form_field(form.load_ruleset, class="bottom_button") }} {{ form.load_name() }} {{ wtf.form_field(form.clear_all, class="bottom_button") }} {{ wtf.form_field(form.plot_all, class="bottom_button") }} </p>
-  <p></p>
+
+  <div class="row rset_rows1" id="rset_total" style="min-height: 300px">
+  </div>
+
+  <div class='row text-center'></div>
+  <div class='row'>
+  <p align="right" class="bottom_background" >
+      {{ form.submit(class_="bottom_button") }}
+      {{ form.add_ruleset(class_="bottom_button") }} {{ form.new_name(class_="bottom_field") }}
+      {{ form.load_ruleset(class_="bottom_button") }} {{ form.load_name(class_="bottom_field") }}  
+
+      {{ form.clear_all(class_="bottom_button") }}
+      {{ form.plot_all(class_="bottom_button") }}</p>
+  </div>
 
 </form>
 </div>
 
-
 <script>
 
 $(document).ready(function(){
+    $('.rset_rows1:first').show();
+    $('.rset_rows2:first').show();
+    $('.top_button:last').prev(".top_button").css("background-color","#f8f8f8");
 
     $(".top_button").click(function(){
-      $('.rset_rows').hide();
+      $('.rset_rows1').hide();
+      $('.rset_rows2').hide();
       var active_rset = $(this).attr('id');
-      $('#rset_' + active_rset).fadeIn();      
-      $(this).css("background-color","white");
+      $('#rset_buttons_' + active_rset).show();     
+      $('#rset_' + active_rset).show();     
+      $(".top_button").css("background-color","#e0e0e0");
+      $(this).css("background-color","#f8f8f8");
     });
 
 });
@@ -129,31 +143,87 @@ $(document).ready(function(){
 <style>
 .top_button {
     text-align: center;
+    font-weight: bold;
     border-style: none;
-
     margin-bottom: 0px;
     margin-left: 0px;
     margin-right: 0px;
-    background-color: #f0f0f0;
+    background-color: #e0e0e0;
+    outline: none;
 }
 
-.bottom_button {
-    text-align: center;
-    /*border-style: none;*/
-    background-color: #cccccc;
+.ix_field {
+    text-align: left;
+    font-style: italic;
+    margin-left: 0px;
+    margin-right: 10px;
+    height: 18px;
+    width: 115px;
+    background-color: #ffffff;
+    border: none;
 }
+
+
+.mid_button {
+    border-style: none;
+    font-style: italic;
+    color: #5160c6;
+    background-color: #f8f8f8;
+    outline: none;
+}
+
 
 .top_background {
-    background: #f0f0f0;
+    background: #e0e0e0;
 } 
+
+.main_container {
+    border-style: solid;
+    border-color: #e0e0e0;
+    border-width: 20px;
+    border-top: none;
+} 
+
+.rset_rows1 {
+    display: none;
+    padding-top: 10px;
+    background-color: #f8f8f8;
+}
+
+.rset_rows2 {
+    display: none;
+    background-color: #f8f8f8;
+
+}
+
+
+.bottom_button {
+    text-align: left;
+    font-weight: bold;
+    margin-left: 10px;
+    margin-right: 0px;
+    height: 28px;
+    border: none;
+    background-color: #e0e0e0;
+}
+
+.bottom_field {
+    text-align: left;
+    margin-left: 0px;
+    margin-right: 10px;
+    height: 28px;
+    border: none;
+    border-color: #e0e0e0;
+    outline: none;
+}
+
 
 .bottom_background {
-    background:#f0f0f0;
+    background:#e0e0e0;
+    padding-top: 10px;
+    margin-bottom: 0;
 } 
 
-.rset_rows {
-    display: none;
-}
 
 </style>
 
