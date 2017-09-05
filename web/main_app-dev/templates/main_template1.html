@@ -16,13 +16,10 @@
 <link rel="stylesheet" type="text/css" href="mystyle.css">
 </head>
 
-
-
-
 {% endblock %}
 
 {% block navbar %}
-  <div class="container-fluid">
+  <div class="container-fluid top_background">
     <div class="navbar-header">
       <a class="navbar-brand" href="/">Spend Modeller</a>
     </div>
@@ -57,40 +54,57 @@
 
 <div class="container-fluid main_container"><form method="POST">{{ form.csrf_token() }}
   {%for r in rulesets %}
-  <div class="row rset_rows1" id={{ "rset_"+r }} style="min-height: 300px">
-      <div class="col-md-1">
-          {%for i in form[r]['string_slice'].data if i != 'csrf_token'%}          
-          <div><p style="height: 18px">{{ i }}</p></div>
-          {% endfor %}
+  <div class="row rset_rows1" id={{ "rset_"+r }} style="min-height: 800px">
+
+      <div class="col-md-4">
+
+          <div class="panel panel-primary">
+              <div class="panel-heading">Index Slicing</div>
+              <div class="panel-body">
+                <div class="col-md-2" style="min-width: 120px">
+                  {%for i in form[r]['string_slice'].data if i != 'csrf_token'%}  <!-- IX LABELS -->        
+                  <p style="height: 18px">{{ i }}</p>
+                  {% endfor %}
+                </div>
+
+                <div class="col-md-1">
+                  {%for i in form[r]['string_slice'] %}   <!-- IX FIELDS -->        
+                  <p style="height: 18px">{{ i(class_="ix_field") }}</p>
+                  {% endfor %}
+                </div>
+              </div>
+          </div>
+
+
+          <div class="panel panel-primary">
+              <div class="panel-heading">Projection function</div>
+              <div class="panel-body">
+                <div class="col-md-2" style="min-width: 120px">
+                    <p style="height: 18px">Function: </p> <!-- FUNC LABELS --> 
+                    {%for p in form[r]['params'].data if p != 'csrf_token' %}           
+                    <p style="height: 18px">{{ p }}</p>
+                    {% endfor %}
+                </div>
+
+                <div class="col-md-1">
+                    <p style="height: 18px">{{ form[r]['rfunc'](class_="ix_field") }}</p>  <!-- FUNC FIELDS -->
+                    {%for p in form[r]['params'] %}          
+                      <p style="height: 18px">{{ p(class_="ix_field") }}</p>
+                    {% endfor %}
+                </div>
+              </div>
+          </div>
+
       </div>
 
-      <div class="col-md-1">
-          {%for i in form[r]['string_slice'] %}         
-          <div><p style="height: 18px">{{ i(class_="ix_field") }}</p></div>
-          {% endfor %}
-      </div>
-
-      <div class="col-md-1">
-          <p style="height: 18px">Function: </p>
-          {%for p in form[r]['params'].data if p != 'csrf_token' %}           
-          <div><p style="height: 18px">{{ p }}</p></div>
-          {% endfor %}
-      </div>
-
-      <div class="col-md-1">
-          <p style="height: 18px">{{ form[r]['rfunc'](class_="ix_field") }}</p>
-          {%for p in form[r]['params'] %}          
-            <p style="height: 18px">{{ p(class_="ix_field") }}</p>
-          {% endfor %}
-      </div>
-
-
-      <div class="col-md-8">
-        <img src={{ outfig }}>
+      <div class="col-md-7">
+                    <img src={{ outfig }}>
       </div>
   </div>
 
   <div class="row rset_rows2 no-gutters" id={{ "rset_buttons_"+r }}>
+
+          <!-- <button>{{ form[r].delete_ruleset(class_="btn btn-primary") }}</button> -->
 
           <button class="mid_button">{{ wtf.form_field(form[r].delete_ruleset, class="mid_button") }}</button>
           <button class="mid_button">{{ wtf.form_field(form[r].add_ruleset_to_plot, class="mid_button") }}</button>
@@ -103,8 +117,18 @@
 
   {% endfor %}
 
-  <div class="row rset_rows1" id="rset_total" style="min-height: 300px">
+  <div class="row rset_rows1" id="rset_total" style="min-height: 800px">
+      <div class="col-md-4">
+      </div>
+      <div class="col-md-7">
+                    <img src={{ outfig }}>
+      </div>
   </div>
+
+  <div class="row rset_rows2 no-gutters" id={{ "rset_buttons_total" }}>
+  </div>
+
+
 
   <div class='row text-center'></div>
   <div class='row'>
@@ -120,45 +144,64 @@
 </form>
 </div>
 
+<p class="top_background" style="height: 800px"></p>
+
 <script>
 
 $(document).ready(function(){
-    $('.rset_rows1:first').show();
-    $('.rset_rows2:first').show();
-    $('.top_button:last').prev(".top_button").css("background-color","#f8f8f8");
+    if ('{{ active_rset }}' === 'None') {
+              var active_rset_input = 'total';
+    }  else {
+              var active_rset_input = '{{ active_rset }}'; 
+    }
+
+    // alert(active_rset_input);
+
+    $('#rset_' + active_rset_input).fadeIn();     
+    $('#' + active_rset_input).css("background-color","#ffffff");     
+    $('#rset_buttons_' + active_rset_input).fadeIn();     
+
 
     $(".top_button").click(function(){
       $('.rset_rows1').hide();
       $('.rset_rows2').hide();
       var active_rset = $(this).attr('id');
-      $('#rset_buttons_' + active_rset).show();     
-      $('#rset_' + active_rset).show();     
+      $('#rset_buttons_' + active_rset).fadeIn();     
+      $('#rset_' + active_rset).fadeIn();     
       $(".top_button").css("background-color","#e0e0e0");
-      $(this).css("background-color","#f8f8f8");
+      $(this).css("background-color","#ffffff");
     });
 
 });
 </script>
 
 <style>
+
+
 .top_button {
     text-align: center;
-    font-weight: bold;
-    border-style: none;
+    font-weight: bolder;
+    font-size: 15px;
+    border-color: #bbbbbb;
+    border-width: 1px;
+    border-bottom-style: none;
+    border-top-style: ridge;
     margin-bottom: 0px;
-    margin-left: 0px;
-    margin-right: 0px;
-    background-color: #e0e0e0;
+
+    background-color: #e8e8e8;
     outline: none;
 }
+
+.panel-primary {
+  background-color: #eaf9fc;
+}
+
+
 
 .ix_field {
     text-align: left;
     font-style: italic;
-    margin-left: 0px;
-    margin-right: 10px;
-    height: 18px;
-    width: 115px;
+
     background-color: #ffffff;
     border: none;
 }
@@ -166,34 +209,43 @@ $(document).ready(function(){
 
 .mid_button {
     border-style: none;
-    font-style: italic;
     color: #5160c6;
-    background-color: #f8f8f8;
+    background-color: #ffffff;
     outline: none;
 }
 
 
 .top_background {
-    background: #e0e0e0;
+    background: #dddddd;
 } 
 
 .main_container {
     border-style: solid;
-    border-color: #e0e0e0;
-    border-width: 20px;
+    border-color: #dddddd;
+    border-width: 15px;
     border-top: none;
 } 
 
 .rset_rows1 {
     display: none;
-    padding-top: 10px;
-    background-color: #f8f8f8;
+    padding-top: 20px;
+    padding-left: 0;
+    background-color: #ffffff;
+    border-color: #bbbbbb;
+    border-style: solid;
+    border-width: 1px;
+    border-top-style: none;
+    border-bottom-style: none;
 }
 
 .rset_rows2 {
     display: none;
-    background-color: #f8f8f8;
-
+    background-color: #ffffff;
+    height: 25px;
+    border-style: solid;
+    border-color: #bbbbbb;
+    border-width: 1px;
+    border-top-style: none;
 }
 
 
@@ -204,7 +256,7 @@ $(document).ready(function(){
     margin-right: 0px;
     height: 28px;
     border: none;
-    background-color: #e0e0e0;
+    background-color: #dddddd;
 }
 
 .bottom_field {
@@ -213,13 +265,13 @@ $(document).ready(function(){
     margin-right: 10px;
     height: 28px;
     border: none;
-    border-color: #e0e0e0;
+    border-color: #dddddd;
     outline: none;
 }
 
 
 .bottom_background {
-    background:#e0e0e0;
+    background:#dddddd;
     padding-top: 10px;
     margin-bottom: 0;
 } 

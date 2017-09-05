@@ -19,7 +19,7 @@ app = Flask(__name__)
 bootstrap = Bootstrap(app)
 app.config['SECRET_KEY'] = 'vq98ervhq98743yh'
 app.debug=True
-toolbar = DebugToolbarExtension(app)
+# toolbar = DebugToolbarExtension(app)
 
 df = pd.read_pickle('c:/Users/groberta/Work/data_accelerator/spend_data_proc/dfs/main_unstacked_17AUG.pkl')
 cutoff = pd.Period('3-2014', freq='M')
@@ -103,6 +103,7 @@ def home():
     '''
 
     outfig="" # do I really need this ??
+    active_rset = None
 
     print("\n***************************CALLING APP *****************************")
 
@@ -192,6 +193,7 @@ def home():
             print('number before:'.ljust(pad1), len(rulesets))
             rulesets[form.new_name.data] = RuleSet.RuleSet(df,form.new_name.data)
             print('number after:'.ljust(pad1), len(rulesets))
+            active_rset = form.new_name.data
 
 
         print("\nCHECKING FOR RULESETS TO LOAD")     
@@ -205,10 +207,12 @@ def home():
             try:
                 with open('rulesets/'+str(form.load_name.data), 'rb') as f:
                     rulesets[form.load_name.data.split('.')[0]] = pickle.load(f)
+                    active_rset = form.load_name.data.split('.')[0]
 
             except:
                 print('could not open ', form.load_name.data)
             print('number after:'.ljust(pad1), len(rulesets))
+
 
 
         print('\nFINAL RULESETS')
@@ -292,7 +296,7 @@ def home():
     for r in rulesets: # why do I need to do this?
         form[r]['rname'].data = r
 
-    return render_template('main_template1.html', form=form, 
+    return render_template('main_template1.html', form=form, active_rset=active_rset,
                                 rulesets=[n for n in rulesets], outfig=outfig)
 
 @app.route('/test/')
