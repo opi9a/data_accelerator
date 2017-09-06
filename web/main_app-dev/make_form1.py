@@ -9,7 +9,7 @@ xForm = FlaskForm # or Form
 def fill_form1():
     pass
 
-def make_form1(rulesets, rfuncs=['','r_profile', 'r_terminal', 'r_fut']): #NB rulesets is the dict of underlying objects
+def make_form1(rulesets, rfuncs=['','r_profile', 'r_tprofile', 'r_terminal', 'r_fut']): #NB rulesets is the dict of underlying objects
                                 #will need to pass actual rfuncs list (just in r_funcs.py right now)    
 
     # first make an empty form - this will be filled and returned

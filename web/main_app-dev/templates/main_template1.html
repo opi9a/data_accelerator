@@ -98,7 +98,7 @@
       </div>
 
       <div class="col-md-7 graph_panel" id={{ "graph_panel_"+r }}>
-                    <img src={{ outfigs[r] }}>
+            <img src={{ outfigs[r] }}>
       </div>
   </div>
 
@@ -119,10 +119,9 @@
   {% endfor %}
 
   <div class="row rset_rows1" id="rset_total" style="min-height: 800px">
-      <div class="col-md-4" >
-      </div>
-      <div class="col-md-7 graph_panel">
-                    <img src={{ outfigs['total'] }}>
+
+      <div class="col-md-10 graph_panel">
+            <img src={{ outfigs['total'] }}>
       </div>
   </div>
 
@@ -199,7 +198,6 @@ $(document).ready(function(){
     border-top-right-radius: 6px;
     border-top-left-radius: 6px;
     margin-bottom: 0px;
-
     background-color: #e8e8e8;
     outline: none;
 }

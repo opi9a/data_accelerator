@@ -30,8 +30,10 @@ pad1 = 30
 rulesets = {}
 # rulesets['rs1'] = RuleSet.RuleSet(df, 'rs1')
 func_table={'r_profile':r_funcs.r_profile, 
+        'r_tprofile':r_funcs.r_tprofile, 
         'r_terminal':r_funcs.r_terminal, 
         'r_fut':r_funcs.r_fut, }
+        # NB currently need to hard code these options in make_form1(), to get in the SelectField
 
 outfigs={} 
 
@@ -173,7 +175,7 @@ def home():
             if form[r].plot_ruleset.data:
                 try:  # NEED A FUNCTION FOR THIS (plotting, at least)
                     rulesets[r].xtrap(npers)
-                    fig = rulesets[r].summed.plot(kind='Area', stacked='True', legend=True, figsize=(5,3), alpha=0.5).get_figure()
+                    fig = (rulesets[r].summed*12/1000000).plot(kind='Area', stacked='True', legend=True, figsize=(7,4), alpha=0.5).get_figure()
                     ts = int((datetime.now() - datetime(1970,1,1)).total_seconds())
                     outfig = str('static/'+ r + "_" + str(ts) + '.png')
                     fig.savefig(outfig)
@@ -251,7 +253,7 @@ def home():
         out_dfs = []
         for r in rulesets:
             print("\nPLOTTING:".ljust(pad1), rulesets[r].name)
-            out_dfs.append(rulesets[r].summed)
+            out_dfs.append(rulesets[r].summed*12/1000000)
             print('length of out_dfs:'.ljust(pad1), len(out_dfs))
 
         try:
@@ -260,7 +262,7 @@ def home():
             print('concatted, with shape '.ljust(pad1), len(df_concat))
             df_concat.to_csv('output/dfconcat.csv')
             fig = df_concat.plot(kind='Area', stacked='True', legend=True, 
-                figsize=(5,3), alpha=0.5).get_figure()
+                figsize=(10,6), alpha=0.5).get_figure()
             
             ts = int((datetime.now() - datetime(1970,1,1)).total_seconds())
             outfig = str('static/total_' + str(ts) + "_" + '.png')

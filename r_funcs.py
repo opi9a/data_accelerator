@@ -3,7 +3,8 @@ import pandas as pd
 import numpy as np
 import projection_funcs
 
-profs_table={'prof1':'c:/Users/groberta/Work/data_accelerator/profiles/prof1.csv'}
+profs_table={'prof1':'c:/Users/groberta/Work/data_accelerator/profiles/prof1.csv',
+             'prof_old': "c:/Users/groberta/Work/data_accelerator/profiles/prof_old.csv"}
 
 ##_________________________________________________________________________##
 
@@ -57,6 +58,47 @@ def r_profile(df, n_pers,
     cols = pd.PeriodIndex(start=last_date+1, periods=n_pers, freq='M')
     
     return pd.DataFrame(out, index=df.index, columns=cols)
+
+##_________________________________________________________________________##
+
+
+
+def r_tprofile(df, n_pers, *, profile):
+    '''
+    Simple extrapolation using a fixed profile.
+    No use of cohorts etc.
+    Takes average of last 3 periods as basis
+    Projects future periods according to the profile (multiplication of the basis)
+    If projecting past the end of profile, just continue at level of last period
+    '''
+    ave_last = np.array(df.iloc[:,-6:].sum(axis=1)/6)
+    print('ave last ', ave_last.shape)
+    
+    if isinstance(profile, str):
+        print("it's a string, so retrieving array")
+        profile = np.genfromtxt(profs_table[profile])
+
+    print('profile input ', profile.shape)
+
+
+    if len(profile) < n_pers:
+        profile1 = np.append(profile,[profile[-1]]*(n_pers-len(profile)))
+    else:
+        profile1 = profile[:n_pers]
+ 
+    print('new profile shape ', profile1.shape)
+        
+    profile_arr = np.array([profile1] * len(df)).T
+    print('profile array ', profile_arr.shape)
+    out = np.multiply(profile_arr, ave_last)
+        
+    ind = df.index
+    last_date = df.columns[-1]
+    cols = pd.PeriodIndex(start=last_date+1, periods=n_pers, freq='M')
+
+    return pd.DataFrame(out.T, index=ind, columns=cols)
+
+
 
 ##_________________________________________________________________________##
 
