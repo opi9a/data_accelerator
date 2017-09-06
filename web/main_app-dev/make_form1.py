@@ -39,6 +39,7 @@ def make_form1(rulesets, rfuncs=['','r_profile', 'r_terminal', 'r_fut']): #NB ru
             #first the invariants (NB, that means the *fields* are invariant, not their contents)
             rname = StringField(default=rulesets[rset].name)
             rfunc = SelectField(choices=list(zip(rfuncs,rfuncs)))
+            plot_ruleset = SubmitField('plot ruleset', default=False)
             delete_ruleset = SubmitField('delete ruleset', default=False)
             add_ruleset_to_plot = SubmitField('add ruleset to plot', default=False)
             save_ruleset = SubmitField('save ruleset', default=False)

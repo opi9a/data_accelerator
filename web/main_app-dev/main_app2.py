@@ -33,6 +33,8 @@ func_table={'r_profile':r_funcs.r_profile,
         'r_terminal':r_funcs.r_terminal, 
         'r_fut':r_funcs.r_fut, }
 
+outfigs={} 
+
 
 
 @app.route('/', methods=['GET', 'POST'])
@@ -102,7 +104,6 @@ def home():
 
     '''
 
-    outfig="" # do I really need this ??
     active_rset = None
 
     print("\n***************************CALLING APP *****************************")
@@ -136,6 +137,7 @@ def home():
             if form[r].delete_ruleset.data:
                 print('deleting:'.ljust(pad1), rulesets[r].name)
                 del rulesets[r]
+                active_rset = None
                 print('rulesets now:'.ljust(pad1), [n for n in rulesets])
                 break
 
@@ -166,15 +168,35 @@ def home():
             del rulesets[r].string_slice['csrf_token']
             rulesets[r].slicify_string()
 
+            # calculate and plot if reqd
+            print("checking if PLOT")
+            if form[r].plot_ruleset.data:
+                try:  # NEED A FUNCTION FOR THIS (plotting, at least)
+                    rulesets[r].xtrap(npers)
+                    fig = rulesets[r].summed.plot(kind='Area', stacked='True', legend=True, figsize=(5,3), alpha=0.5).get_figure()
+                    ts = int((datetime.now() - datetime(1970,1,1)).total_seconds())
+                    outfig = str('static/'+ r + "_" + str(ts) + '.png')
+                    fig.savefig(outfig)
+                    print("SAVING FIG AS:".ljust(pad1), outfig)
+                    outfigs[r] = outfig
+                    print("Outfigs dict:".ljust(pad1), outfigs)
+                except: 
+                    print("could not save", rulesets[r].name)
+                
+                form[r].plot_ruleset.data = False 
+                active_rset = rulesets[r].name
+
+
+
             # save if required
-            print("checking if save")
+            print("checking if SAVE")
             if form[r].save_ruleset.data:
                 with open('rulesets/'+str(r)+'.pkl', 'wb') as f:
                     pickle.dump(rulesets[r], f, protocol=pickle.HIGHEST_PROTOCOL)
                 form[r].save_ruleset.data == False
 
             # dump to xls if required
-            print("checking if dumping to excel")
+            print("checking if DUMPING to excel")
             if form[r].dump_rset_to_xls.data:
                 writer = pd.ExcelWriter('output/' + rulesets[r].name + '.xlsx')
                 rulesets[r].past.to_excel(writer, 'past')
@@ -229,10 +251,6 @@ def home():
         out_dfs = []
         for r in rulesets:
             print("\nPLOTTING:".ljust(pad1), rulesets[r].name)
-            rulesets[r].xtrap(npers)
-            # print(rulesets[r].joined.head())
-            pd.DataFrame(rulesets[r].joined).to_csv('output/df1.csv')
-            print('info on ', r, ':'.ljust(pad1), rulesets[r].summed.info())
             out_dfs.append(rulesets[r].summed)
             print('length of out_dfs:'.ljust(pad1), len(out_dfs))
 
@@ -245,12 +263,13 @@ def home():
                 figsize=(5,3), alpha=0.5).get_figure()
             
             ts = int((datetime.now() - datetime(1970,1,1)).total_seconds())
-            outfig = str('static/outfig' + str(ts) + '.png')
+            outfig = str('static/total_' + str(ts) + "_" + '.png')
             fig.savefig(outfig)
-            print("SAVING FIG AS:".ljust(pad1), outfig)       
+            outfigs['total'] = outfig
+            print("saving TOTAL fig as:".ljust(pad1), outfig)       
 
         except:
-            print("couldn't make a plot / figure")
+            print("couldn't make a total plot / figure")
 
         print('RULESET AFTER PLOTTING')
         pprint.pprint(rulesets)
@@ -295,9 +314,11 @@ def home():
     form['new_name'].data = ""
     for r in rulesets: # why do I need to do this?
         form[r]['rname'].data = r
+    
+    print("Outfigs dict:".ljust(pad1), outfigs)
 
     return render_template('main_template1.html', form=form, active_rset=active_rset,
-                                rulesets=[n for n in rulesets], outfig=outfig)
+                                rulesets=[n for n in rulesets], outfigs=outfigs)
 
 @app.route('/test/')
 def test():

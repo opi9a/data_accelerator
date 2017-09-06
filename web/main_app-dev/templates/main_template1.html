@@ -58,7 +58,7 @@
 
       <div class="col-md-4">
 
-          <div class="panel panel-primary">
+          <div class="panel panel-primary" id={{ "ix_panel_"+r }}>
               <div class="panel-heading">Index Slicing</div>
               <div class="panel-body">
                 <div class="col-md-2" style="min-width: 120px">
@@ -76,7 +76,7 @@
           </div>
 
 
-          <div class="panel panel-primary">
+          <div class="panel panel-primary" id={{ "func_panel_"+r }}>
               <div class="panel-heading">Projection function</div>
               <div class="panel-body">
                 <div class="col-md-2" style="min-width: 120px">
@@ -97,8 +97,8 @@
 
       </div>
 
-      <div class="col-md-7">
-                    <img src={{ outfig }}>
+      <div class="col-md-7 graph_panel" id={{ "graph_panel_"+r }}>
+                    <img src={{ outfigs[r] }}>
       </div>
   </div>
 
@@ -106,6 +106,7 @@
 
           <!-- <button>{{ form[r].delete_ruleset(class_="btn btn-primary") }}</button> -->
 
+          <button class="mid_button">{{ wtf.form_field(form[r].plot_ruleset, class="mid_button") }}</button>
           <button class="mid_button">{{ wtf.form_field(form[r].delete_ruleset, class="mid_button") }}</button>
           <button class="mid_button">{{ wtf.form_field(form[r].add_ruleset_to_plot, class="mid_button") }}</button>
           <button class="mid_button" >{{ wtf.form_field(form[r].save_ruleset, class="mid_button") }}</button>
@@ -118,10 +119,10 @@
   {% endfor %}
 
   <div class="row rset_rows1" id="rset_total" style="min-height: 800px">
-      <div class="col-md-4">
+      <div class="col-md-4" >
       </div>
-      <div class="col-md-7">
-                    <img src={{ outfig }}>
+      <div class="col-md-7 graph_panel">
+                    <img src={{ outfigs['total'] }}>
       </div>
   </div>
 
@@ -157,7 +158,10 @@ $(document).ready(function(){
 
     // alert(active_rset_input);
 
-    $('#rset_' + active_rset_input).fadeIn();     
+    $('#rset_' + active_rset_input).show();     
+    $('#ix_panel_' + active_rset_input).fadeIn();     
+    $('#func_panel_' + active_rset_input).fadeIn();     
+    $('#graph_panel_' + active_rset_input).fadeIn();     
     $('#' + active_rset_input).css("background-color","#ffffff");     
     $('#rset_buttons_' + active_rset_input).fadeIn();     
 
@@ -165,11 +169,18 @@ $(document).ready(function(){
     $(".top_button").click(function(){
       $('.rset_rows1').hide();
       $('.rset_rows2').hide();
+      $('.panel-primary').hide();
+      $('.graph_panel').hide();
+
+
       var active_rset = $(this).attr('id');
-      $('#rset_buttons_' + active_rset).fadeIn();     
-      $('#rset_' + active_rset).fadeIn();     
+      $('#rset_' + active_rset).show();     
+      $('.panel-primary').fadeIn();
+      $('.graph_panel').fadeIn();
+
       $(".top_button").css("background-color","#e0e0e0");
       $(this).css("background-color","#ffffff");
+      $('#rset_buttons_' + active_rset).show();     
     });
 
 });
@@ -185,7 +196,8 @@ $(document).ready(function(){
     border-color: #bbbbbb;
     border-width: 1px;
     border-bottom-style: none;
-    border-top-style: ridge;
+    border-top-right-radius: 6px;
+    border-top-left-radius: 6px;
     margin-bottom: 0px;
 
     background-color: #e8e8e8;
@@ -222,6 +234,7 @@ $(document).ready(function(){
 .main_container {
     border-style: solid;
     border-color: #dddddd;
+    background-color: #dddddd;
     border-width: 15px;
     border-top: none;
 } 
@@ -234,6 +247,7 @@ $(document).ready(function(){
     border-color: #bbbbbb;
     border-style: solid;
     border-width: 1px;
+    border-top-right-radius: 15px;
     border-top-style: none;
     border-bottom-style: none;
 }
@@ -241,11 +255,13 @@ $(document).ready(function(){
 .rset_rows2 {
     display: none;
     background-color: #ffffff;
-    height: 25px;
+    height: 35px;
     border-style: solid;
     border-color: #bbbbbb;
     border-width: 1px;
     border-top-style: none;
+    border-bottom-right-radius: 15px;
+    border-bottom-left-radius: 15px;
 }
 
 
