@@ -9,6 +9,17 @@ import pandas as pd
 import numpy as np
 
 
+###_________________________________________________________________________###
+
+def mov_ave(in_arr, window):
+    a = np.cumsum(in_arr) # total cumulative sum
+    b=(np.cumsum(in_arr)[:-window]) # shifted forward, overlap truncated
+    c = np.insert(b,0,np.zeros(window))  # start filled to get to line up
+    return(a-c)/window
+
+
+###_________________________________________________________________________###
+
 def variablise(string):
     
     if string.strip().lower() == 'true':
@@ -190,6 +201,7 @@ def spender(spend_per, profile, launch_pers, coh_growth, term_growth, debug=Fals
                       "{0:.2f}".format(val).rjust(pads[6])) 
         yield val
 
+###_________________________________________________________________________###
 
         
 def get_forecast(profile, l_start, l_stop, coh_growth, term_growth, scale, 
@@ -246,6 +258,35 @@ def get_forecast(profile, l_start, l_stop, coh_growth, term_growth, scale,
 ###_________________________________________________________________________###
 
 
+def find_launch(sales, *, threshold, zero_first=True):
+    '''Taking a list as input, plus threshold percentage of max sales,
+    returns the index of the first element to exceed that threshold.
+    
+    If not found returns "no data"
+    
+    zero_first=True means index will be returned based on zero as first element.
+    
+    Works with tuples and pd.Series
+    '''
+    launch = 0
+    
+    max_sales = sales.max()  
+    sales_threshold = threshold * max_sales
+    
+    try:
+        for i, val in enumerate(sales):
+            if i == 0 and val > sales_threshold:
+                break
+            elif i > 0 and val > sales_threshold:
+                launch = i
+                break
+    except:
+        return "No data"
+
+    if launch == 0: return 0
+    else:
+        if zero_first: return launch
+        else: return launch + 1
 
 
 ###_________________________________________________________________________###

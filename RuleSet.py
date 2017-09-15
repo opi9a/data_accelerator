@@ -72,6 +72,7 @@ class RuleSet:
         if self.func==None:
             print("no function yet")
 
+
         else:
             return inspect.getfullargspec(self.func)[4]
 

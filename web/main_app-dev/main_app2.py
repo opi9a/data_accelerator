@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request#, redirect, session
+from flask import Flask, render_template, request, session, url_for#, session
 from flask_bootstrap import Bootstrap
 from flask_debugtoolbar import DebugToolbarExtension
 from make_form1 import make_form1
@@ -21,7 +21,8 @@ app.config['SECRET_KEY'] = 'vq98ervhq98743yh'
 app.debug=True
 # toolbar = DebugToolbarExtension(app)
 
-df = pd.read_pickle('c:/Users/groberta/Work/data_accelerator/spend_data_proc/dfs/main_unstacked_17AUG.pkl')
+# df = pd.read_pickle('c:/Users/groberta/Work/data_accelerator/spend_data_proc/dfs/main_unstacked_17AUG.pkl') # old df
+df = pd.read_pickle('c:/Users/groberta/Work/data_accelerator/spend_data_proc/dfs/main_df_new_dates_11SEP2017.pkl')
 cutoff = pd.Period('3-2014', freq='M')
 npers = 120
 
@@ -122,11 +123,14 @@ def home():
 
     if form.submit(): # I think it always is
         print('\nSubmission detected')
-        
+        active_rset = session.get('last_active_rset', None)
+        print('active rset'.ljust(pad1), active_rset)
         # check for clear all
         if form.clear_all.data:
             print("3. Clearing all rulesets")
             rulesets.clear()
+            outfigs.clear()
+            print("rulesets after clear_all:".ljust(pad1), [n for n in rulesets])
 
         # iterate through the rulesets, deleting and updating
         print("\nPARSING FORM AND UPDATING RULESET")
@@ -196,6 +200,7 @@ def home():
                 with open('rulesets/'+str(r)+'.pkl', 'wb') as f:
                     pickle.dump(rulesets[r], f, protocol=pickle.HIGHEST_PROTOCOL)
                 form[r].save_ruleset.data == False
+                active_rset = rulesets[r].name
 
             # dump to xls if required
             print("checking if DUMPING to excel")
@@ -207,6 +212,7 @@ def home():
                 rulesets[r].summed.to_excel(writer, 'summed')
                 writer.save()
                 form[r].dump_rset_to_xls.data == False
+                active_rset = rulesets[r].name
 
 
         # 4. Create or load any new rulesets
@@ -268,6 +274,7 @@ def home():
             outfig = str('static/total_' + str(ts) + "_" + '.png')
             fig.savefig(outfig)
             outfigs['total'] = outfig
+            active_rset = 'total'
             print("saving TOTAL fig as:".ljust(pad1), outfig)       
 
         except:
@@ -318,6 +325,8 @@ def home():
         form[r]['rname'].data = r
     
     print("Outfigs dict:".ljust(pad1), outfigs)
+
+    session['last_active_rset'] = active_rset
 
     return render_template('main_template1.html', form=form, active_rset=active_rset,
                                 rulesets=[n for n in rulesets], outfigs=outfigs)

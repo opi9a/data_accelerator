@@ -15,6 +15,88 @@ TODO: document the API etc
 
 ##_________________________________________________________________________##
 
+def trend(prod, interval, *, mov_ave_out=False, launch_cat=None, life_cycle_per=None,
+          uptake_dur=None, plat_dur=None, drop=None, term_rate_pa=None,
+          threshold_rate=0.001, n_pers=12, debug=False, name=None):
+    
+    lpad, rpad = 50, 20
+
+    if name is not None:
+        if debug: print('\n\nIn ',  name)
+    else: print('\nNo name')
+    
+    # make sure initial array is ok
+    try:
+        prod = np.array(prod)
+        if debug: print("made np array, len:".ljust(lpad), str(len(prod)).rjust(rpad))
+    except:
+        if debug: print("could not make np array")
+        if debug: print("prod type:".ljust(lpad), str(type(prod)).rjust(rpad))
+        if debug: print("prod len:".ljust(lpad), str(len(prod)).rjust(rpad))
+            
+
+    # make an annual moving average array
+    prod[np.isnan(prod)]=0
+    prod_ma = projection_funcs.mov_ave(prod, 12)
+    
+    # get set of info
+
+    i_dict = {}
+    i_dict['__s1'] = "spacer"
+    i_dict['max_sales'] = np.nanmax(prod)    
+    i_dict['max_sales_per'] = np.nanargmax(prod)
+    i_dict['last_spend'] = (prod[-1])
+
+    i_dict['__s2'] = "spacer"
+    i_dict['max_sales_ma'] = np.nanmax(prod_ma)    
+    i_dict['max_sales_ma_per'] = np.nanargmax(prod_ma)
+    i_dict['last_spend_ma'] = (prod_ma[-1])
+
+    # get drop from max 
+    i_dict['__s3'] = "spacer"
+    i_dict['total_drop_ma'] = max(0, i_dict['max_sales_ma'] - i_dict['last_spend_ma'])
+    i_dict['total_drop_ma_pct'] = i_dict['total_drop_ma']/i_dict['max_sales_ma']
+    
+    # get linear change per period over interval of periods
+    # TODO calculate this on recent averages
+    i_dict['__s4'] = "spacer"
+    i_dict['interval'] = min(interval, len(prod))
+    i_dict['interval_delta'] = prod[-1] - prod[-(1 + interval)]
+    i_dict['interval_rate'] = i_dict['interval_delta'] / interval
+    i_dict['interval_rate_pct'] = i_dict['interval_rate'] / prod[-(1 + interval)]
+    
+    
+    if debug: 
+        for i in i_dict:
+            if i_dict[i]=="spacer": print("")
+            else:
+                print(i.ljust(lpad), str(i_dict[i]).rjust(rpad))
+    
+    # decide what this is
+    # ifperiod
+    
+    
+    # just generate projection if rate over a threshold
+    
+    if i_dict['interval_rate_pct'] > threshold_rate:
+        if debug: print('rate is OVER threshold')
+        out = i_dict['last_spend'] + (i_dict['interval_rate'] * np.arange(1,n_pers+1))
+        
+        # apply plateau
+            
+    else:
+        if debug: print('rate is UNDER threshold')
+        out = i_dict['last_spend'] * np.ones(n_pers)
+    
+    if mov_ave_out:
+        return np.append(prod_ma,out)
+    else:
+        return np.append(prod,out)
+
+    
+
+##_________________________________________________________________________##
+
 
 def r_profile(df, n_pers, 
               *, profile, gen_mult, debug=False):
@@ -36,7 +118,7 @@ def r_profile(df, n_pers,
 
     for row in df.itertuples():
         #note the structure of each row:  [0] is the index (a tuple), [1:] is the data
-        launch_date = row[0][df.index.names.index('start_date')] # gets the index number of 'start_date' in the df.index list
+        launch_date = row[0][df.index.names.index('start_month')] # gets the index number of 'start_date' in the df.index list
         last_date = df.columns[-1]
         last_spend = row[-1]
         start_x = last_date - launch_date

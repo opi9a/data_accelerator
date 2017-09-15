@@ -11,9 +11,11 @@
 <head>
 <!-- can't seem to get it to pick jquery up locally, so using cdn for now -->
 <!-- <head><script src="jquery-3.2.1.min.js"></script></head> -->
-<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
+<script type="text/javascript" src="{{ url_for('static', filename='js/jquery-3.2.1.js') }}"></script>
 
-<link rel="stylesheet" type="text/css" href="mystyle.css">
+<!-- <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script> -->
+
+<!-- <link rel="stylesheet" type="text/css" href="mystyle.css"> -->
 </head>
 
 {% endblock %}
@@ -157,7 +159,8 @@ $(document).ready(function(){
 
     // alert(active_rset_input);
 
-    $('#rset_' + active_rset_input).show();     
+
+    $('#rset_' + active_rset_input).fadeIn();     
     $('#ix_panel_' + active_rset_input).fadeIn();     
     $('#func_panel_' + active_rset_input).fadeIn();     
     $('#graph_panel_' + active_rset_input).fadeIn();     
