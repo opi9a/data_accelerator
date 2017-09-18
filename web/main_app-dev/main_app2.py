@@ -130,6 +130,7 @@ def home():
             print("3. Clearing all rulesets")
             rulesets.clear()
             outfigs.clear()
+            active_rset = None
             print("rulesets after clear_all:".ljust(pad1), [n for n in rulesets])
 
         # iterate through the rulesets, deleting and updating
@@ -177,17 +178,18 @@ def home():
             # calculate and plot if reqd
             print("checking if PLOT")
             if form[r].plot_ruleset.data:
-                try:  # NEED A FUNCTION FOR THIS (plotting, at least)
-                    rulesets[r].xtrap(npers)
-                    fig = (rulesets[r].summed*12/1000000).plot(kind='Area', stacked='True', legend=True, figsize=(7,4), alpha=0.5).get_figure()
-                    ts = int((datetime.now() - datetime(1970,1,1)).total_seconds())
-                    outfig = str('static/'+ r + "_" + str(ts) + '.png')
-                    fig.savefig(outfig)
-                    print("SAVING FIG AS:".ljust(pad1), outfig)
-                    outfigs[r] = outfig
-                    print("Outfigs dict:".ljust(pad1), outfigs)
-                except: 
-                    print("could not save", rulesets[r].name)
+                # try:  # NEED A FUNCTION FOR THIS (plotting, at least)
+                rulesets[r].xtrap(npers)
+                print('xtrap returned')
+                fig = (rulesets[r].summed*12/1000000).plot(kind='Area', stacked='True', legend=True, figsize=(7,4), alpha=0.5).get_figure()
+                ts = int((datetime.now() - datetime(1970,1,1)).total_seconds())
+                outfig = str('static/'+ r + "_" + str(ts) + '.png')
+                fig.savefig(outfig)
+                print("SAVING FIG AS:".ljust(pad1), outfig)
+                outfigs[r] = outfig
+                print("Outfigs dict:".ljust(pad1), outfigs)
+                # except: 
+                #     print("could not save", rulesets[r].name)
                 
                 form[r].plot_ruleset.data = False 
                 active_rset = rulesets[r].name

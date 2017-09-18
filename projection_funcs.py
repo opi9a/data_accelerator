@@ -112,12 +112,12 @@ def get_ix_slice(df, in_dict):
     '''
     # first turn any None entries of the input into slices
     for i in in_dict:
-        print(' in get slice, with key ', i, " value", in_dict[i])
+        # print(' in get slice, with key ', i, " value", in_dict[i])
         if in_dict[i] is '' or in_dict[i] is None:
-            print('setting element to noneslice')
+            # print('setting element to noneslice')
             in_dict[i] = slice(None, None, None)
             
-        else: print('it was not none')
+        # else: print('it was not none')
     print('after processing the dict is ', in_dict)
 
     return tuple((in_dict.get(name, slice(None,None,None)))

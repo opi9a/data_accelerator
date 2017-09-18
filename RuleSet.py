@@ -88,10 +88,13 @@ class RuleSet:
         print("and the args are ", self.f_args)
         print("the slice is ", get_ix_slice(self.parent_df, self.index_slice))
 
+        print('getting slice and assigning to past')
         self.past = self.parent_df.loc[get_ix_slice(self.parent_df, self.index_slice),:]
         
+        print('calling function')
         self.fut = self.func(self.past, n_pers, **self.f_args)
-            
+
+        print('function returned')
         if self.join_output:
             try:
                 self.joined = self.past.join(self.fut)

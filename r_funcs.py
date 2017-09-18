@@ -99,7 +99,7 @@ def trend(prod, interval, *, mov_ave_out=False, launch_cat=None, life_cycle_per=
 
 
 def r_profile(df, n_pers, 
-              *, profile, gen_mult, debug=False):
+              *, profile, gen_mult, debug=True):
     '''Applies a profile, with a variable multiplier for patent expiry
     
     args:   data (df or series - future) - which includes index data eg launch year
@@ -118,7 +118,7 @@ def r_profile(df, n_pers,
 
     for row in df.itertuples():
         #note the structure of each row:  [0] is the index (a tuple), [1:] is the data
-        launch_date = row[0][df.index.names.index('start_month')] # gets the index number of 'start_date' in the df.index list
+        launch_date = row[0][df.index.names.index('start_date')] # gets the index number of 'start_date' in the df.index list
         last_date = df.columns[-1]
         last_spend = row[-1]
         start_x = last_date - launch_date
