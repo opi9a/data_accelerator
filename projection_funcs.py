@@ -22,6 +22,10 @@ def mov_ave(in_arr, window):
 
 def variablise(string):
     
+    if string is None:
+        print('variablising but None for string')
+        return None
+
     if string.strip().lower() == 'true':
         return True
     elif string.strip().lower() == 'false':
@@ -130,7 +134,7 @@ def get_ix_slice(df, in_dict):
 # Given input profile, timings etc, returns the spend on each cohort.  
 # It's a generator, intended to be consumed as `sum(spender(...))`.
 
-def spender(spend_per, profile, launch_pers, coh_growth, term_growth, debug=False):
+def spender(spend_per, profile, launch_pers, coh_growth, term_growth, _debug=False):
     '''Generator function which iterates through all cohorts extant at spend_per,
     yielding spend adjusted for cohort growth and terminal change.  
     Designed to be consumed with sum(self._spender(spend_per)).
@@ -152,7 +156,7 @@ def spender(spend_per, profile, launch_pers, coh_growth, term_growth, debug=Fals
     f_start, f_end = frame
     last_coh = min(launch_pers, spend_per) # minus 1 to make zero based
     
-    if debug:
+    if _debug:
         print("Frame: ", frame, "   Number of cohorts existing:  ", last_coh+1)
         titles = "Prof point, Coh id, Raw val, Coh adj, Term adj, Total adj,   Val".split(",")
         pads = [len(t)-1 for t in titles]
@@ -171,7 +175,7 @@ def spender(spend_per, profile, launch_pers, coh_growth, term_growth, debug=Fals
         coh_adj = (1+coh_growth)**coh_id # used to adjust for growth between cohorts
         term_adj = 1 # will be used to adjust for change after period - set to 1 initially
         
-        if debug: print(str(prof_point).rjust(pads[0]+1), "|", 
+        if _debug: print(str(prof_point).rjust(pads[0]+1), "|", 
                         str(coh_id).rjust(pads[1]), "|", end="") 
                         
        
@@ -186,7 +190,7 @@ def spender(spend_per, profile, launch_pers, coh_growth, term_growth, debug=Fals
             term_adj = (1+term_growth)**(prof_point - prof_len+1)
             val = term_value * coh_adj * term_adj
 
-        if debug: 
+        if _debug: 
             if prof_point < prof_len:
                 raw_val = profile[prof_point]
                 term_adj_str = "-"
@@ -205,7 +209,7 @@ def spender(spend_per, profile, launch_pers, coh_growth, term_growth, debug=Fals
 
         
 def get_forecast(profile, l_start, l_stop, coh_growth, term_growth, scale, 
-                 proj_start, proj_stop, name='s_pd', debug=False):
+                 proj_start, proj_stop, name='s_pd', _debug=False):
     ''' Arguments: 
            - a spend profile
            - launch start and stop periods
@@ -222,8 +226,8 @@ def get_forecast(profile, l_start, l_stop, coh_growth, term_growth, scale,
     profile = profile * scale
     launch_pers = l_stop-1 - l_start
     
-    # Debugging - create and print a record
-    if debug:
+    # _debugging - create and print a record
+    if _debug:
         info = {"Name": name,
          "First launch period": l_start,
          "Last launch period": l_stop,
@@ -248,10 +252,10 @@ def get_forecast(profile, l_start, l_stop, coh_growth, term_growth, scale,
     # Wrap in pd.Series and return
     np_out = np.empty(plot_range)
     for i, per in enumerate(range(proj_start-l_start, proj_stop-l_start)):
-        if debug: print("\nGetting period ", per)
+        if _debug: print("\nGetting period ", per)
         np_out[i] = sum(spender(per, profile, launch_pers, 
-                                coh_growth, term_growth, debug=debug))
-        if debug: print("--> Period ", per, "result: ", np_out[i])
+                                coh_growth, term_growth, _debug=_debug))
+        if _debug: print("--> Period ", per, "result: ", np_out[i])
 
     return pd.Series(np_out, index=range(proj_start, proj_stop), name=name)
 

@@ -22,17 +22,22 @@ app.debug=True
 # toolbar = DebugToolbarExtension(app)
 
 # df = pd.read_pickle('c:/Users/groberta/Work/data_accelerator/spend_data_proc/dfs/main_unstacked_17AUG.pkl') # old df
-df = pd.read_pickle('c:/Users/groberta/Work/data_accelerator/spend_data_proc/dfs/main_df_new_dates_11SEP2017.pkl')
+df = pd.read_pickle('c:/Users/groberta/Work/data_accelerator/spend_data_proc/dfs/main_df_new_dates_13SEP2017a.pkl')
 cutoff = pd.Period('3-2014', freq='M')
 npers = 120
 
+plt.style.use('seaborn')
+
 pad1 = 30
+
+phx_adj = 1.65 # pharmex omits a bunch of spend - this is the ave adjustment reqd
 
 rulesets = {}
 # rulesets['rs1'] = RuleSet.RuleSet(df, 'rs1')
 func_table={'r_profile':r_funcs.r_profile, 
         'r_tprofile':r_funcs.r_tprofile, 
         'r_terminal':r_funcs.r_terminal, 
+        'r_trend':r_funcs.r_trend, 
         'r_fut':r_funcs.r_fut, }
         # NB currently need to hard code these options in make_form1(), to get in the SelectField
 
@@ -181,7 +186,7 @@ def home():
                 # try:  # NEED A FUNCTION FOR THIS (plotting, at least)
                 rulesets[r].xtrap(npers)
                 print('xtrap returned')
-                fig = (rulesets[r].summed*12/1000000).plot(kind='Area', stacked='True', legend=True, figsize=(7,4), alpha=0.5).get_figure()
+                fig = (rulesets[r].summed*phx_adj*12/1000000).plot(kind='Area', stacked='True', legend=True, figsize=(7,4), alpha=0.5).get_figure()
                 ts = int((datetime.now() - datetime(1970,1,1)).total_seconds())
                 outfig = str('static/'+ r + "_" + str(ts) + '.png')
                 fig.savefig(outfig)
@@ -261,7 +266,7 @@ def home():
         out_dfs = []
         for r in rulesets:
             print("\nPLOTTING:".ljust(pad1), rulesets[r].name)
-            out_dfs.append(rulesets[r].summed*12/1000000)
+            out_dfs.append(rulesets[r].summed*phx_adj*12/1000000000)
             print('length of out_dfs:'.ljust(pad1), len(out_dfs))
 
         try:
@@ -270,7 +275,7 @@ def home():
             print('concatted, with shape '.ljust(pad1), len(df_concat))
             df_concat.to_csv('output/dfconcat.csv')
             fig = df_concat.plot(kind='Area', stacked='True', legend=True, 
-                figsize=(10,6), alpha=0.5).get_figure()
+                figsize=(14,8), alpha=0.5).get_figure()
             
             ts = int((datetime.now() - datetime(1970,1,1)).total_seconds())
             outfig = str('static/total_' + str(ts) + "_" + '.png')

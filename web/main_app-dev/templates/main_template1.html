@@ -83,7 +83,7 @@
               <div class="panel-body">
                 <div class="col-md-2" style="min-width: 120px">
                     <p style="height: 18px">Function: </p> <!-- FUNC LABELS --> 
-                    {%for p in form[r]['params'].data if p != 'csrf_token' %}           
+                    {%for p in form[r]['params'].data if (p != 'csrf_token') %}           
                     <p style="height: 18px">{{ p }}</p>
                     {% endfor %}
                 </div>
