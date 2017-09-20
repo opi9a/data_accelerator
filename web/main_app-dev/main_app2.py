@@ -38,7 +38,8 @@ func_table={'r_profile':r_funcs.r_profile,
         'r_tprofile':r_funcs.r_tprofile, 
         'r_terminal':r_funcs.r_terminal, 
         'r_trend':r_funcs.r_trend, 
-        'r_fut':r_funcs.r_fut, }
+        'r_fut':r_funcs.r_fut, 
+        'r_fut_tr':r_funcs.r_fut_tr}
         # NB currently need to hard code these options in make_form1(), to get in the SelectField
 
 outfigs={} 

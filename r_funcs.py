@@ -376,3 +376,69 @@ def r_fut(df, n_pers, *, profile, cutoff_date,
     out.index=pd.PeriodIndex(start=last_date+1, periods=n_pers, freq='M')
 
     return pd.DataFrame(out)
+
+
+
+##_________________________________________________________________________##
+
+
+
+def r_fut_tr(df, n_pers, *, cutoff_date, uptake_dur, plat_dur, gen_mult, 
+             coh_growth_pa, term_growth_pa, name='future', _debug=False):
+    
+    coh_growth = coh_growth_pa /12
+    term_growth = term_growth_pa /12
+
+    # work out what l_start and l_stop should be, and how passed to get_forecast()
+
+    # sum the df, as we don't care about individual products.  NB it's now a Series
+    
+    cutoff_date = pd.Period(cutoff_date)
+    df=df.sum()
+    last_date = df.index[-1]
+    
+    # use trend() to generate a profile for future cohorts
+    # this willjust take the summed df as if it were a single line of spend
+    # with a launch date and lifecycle period
+    # then apply profile parameters such as uptake_dur as for r_trend() etc
+    
+    life_cycle_per = last_date - cutoff_date
+    if _debug: print('life_cycle_per'.ljust(20), life_cycle_per)
+    
+    if life_cycle_per <24: 
+        print("WARNING: calling trend() with less than 2 years input data.  ")
+        print("This may cause problems with the moving average calculation, which is currently hard-coded to compare two years I think")
+        
+    profile = trend(df, 12, life_cycle_per=life_cycle_per, uptake_dur=uptake_dur, plat_dur=plat_dur, 
+               gen_mult=gen_mult, term_rate_pa=term_growth_pa,_debug=False, n_pers = n_pers)
+    
+    
+    # now continue with the future cohorts
+    
+    l_start=0
+    l_stop=(last_date - cutoff_date)+n_pers
+    proj_start=(last_date - cutoff_date)
+    proj_stop=(last_date - cutoff_date)+n_pers
+    
+    if _debug: 
+        pad=20
+        print("n_pers".ljust(pad), n_pers,"\nlast_date".ljust(pad), last_date,"\ncutoff_date".ljust(pad), cutoff_date,"\nl_start".ljust(pad), l_start,"\nl_stop".ljust(pad), l_stop,"\nproj_start".ljust(pad), proj_start,"\nproj_stop".ljust(pad), proj_stop)
+    
+    # note this gets a projection for one period behind the required, to allow scaling.  This must be sliced off later.
+    fut = projection_funcs.get_forecast(profile, l_start, l_stop, coh_growth,term_growth,1, proj_start-1, proj_stop, name=name)
+    if _debug: print(fut)
+        
+    # now get scaling factor. Take cumulative sum for last period in slice passed
+    # (also should have available the actual period from the slice - do later)
+    last_sum = df[-1]
+
+    # to scale, want the period just before the fut forecast to equal last_sum.  Deliberately overlap, and then snip off first period?
+    scaler=last_sum/fut.iloc[0]
+    
+    if _debug: print(last_sum, scaler)
+    
+    out = (fut*scaler)[1:]
+    
+    out.index=pd.PeriodIndex(start=last_date+1, periods=n_pers, freq='M')
+
+    return pd.DataFrame(out)
