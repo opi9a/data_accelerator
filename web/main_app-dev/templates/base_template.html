@@ -1,0 +1,42 @@
+{% extends 'bootstrap/base.html' %}
+{% import "bootstrap/wtf.html" as wtf %}
+
+{% block meta %}
+
+{% endblock %}
+
+{% block head %}
+{{ super() }}
+
+<head>
+<!-- can't seem to get it to pick jquery up locally, so using cdn for now -->
+<!-- <head><script src="jquery-3.2.1.min.js"></script></head> -->
+<script type="text/javascript" src="{{ url_for('static', filename='js/jquery-3.2.1.js') }}"></script>
+
+<!-- <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script> -->
+
+<!-- <link rel="stylesheet" type="text/css" href="mystyle.css"> -->
+</head>
+
+{% endblock %}
+
+{% block navbar %}
+  <div class="container-fluid top_background">
+    <div class="navbar-header">
+      <a class="navbar-brand" href="/">Spend Modeller</a>
+    </div>
+    <ul class="nav navbar-nav">
+      <li class="active"><a href="/sim/">Simulations</a></li>
+      <li><a href="/explorer/">Explorer</a></li>
+      <li><a href="/profiler/">Lifecycle Profiles</a></li>
+      <li><a href="/test/">test</a></li>
+      <li><a href="/scenarios/">scenarios</a></li>
+
+    </ul>
+        <ul class="nav navbar-nav navbar-right">
+      <li><a href="#"><span class="glyphicon glyphicon-user"></span> Who am I?</a></li>
+      <li><a href="#"><span class="glyphicon glyphicon-log-in"></span> Follow me</a></li>
+    </ul>
+  </div>
+{% endblock %}
+

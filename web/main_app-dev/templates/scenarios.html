@@ -1,0 +1,26 @@
+{% extends 'base_template.html' %}
+
+{% block content %}
+
+<!-- first print out list of rulesets, plus total element -->
+
+<div class="container-fluid top_background">
+  <p>Available Scenarios</p>
+  {% for p in project %}
+  <p>{{ p }}</p>
+  {% endfor %}
+</div>
+
+
+{% endblock %}
+
+
+
+
+
+
+
+
+
+
+

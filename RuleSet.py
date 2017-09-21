@@ -9,7 +9,7 @@ import inspect
 
 class RuleSet:
     def __init__(self, parent_df, name, string_slice=None, index_slice=None,
-                func=None, f_args={}, join_output=True):
+                func_str="", func=None, f_args={}, join_output=True):
         self.name = name
         self.parent_df = parent_df
         
@@ -23,6 +23,7 @@ class RuleSet:
         self.string_slice = string_slice
 
         self.func = func
+        self.func_str = func_str
         print("initialising f args to", f_args)
         self.f_args = f_args
         self.past = None

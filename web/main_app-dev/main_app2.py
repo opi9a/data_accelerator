@@ -32,6 +32,8 @@ pad1 = 30
 
 phx_adj = 1.65 # pharmex omits a bunch of spend - this is the ave adjustment reqd
 
+scenario = {}
+
 rulesets = {}
 # rulesets['rs1'] = RuleSet.RuleSet(df, 'rs1')
 func_table={'r_profile':r_funcs.r_profile, 
@@ -127,6 +129,20 @@ def home():
     pprint.pprint(form.data)
 
 
+    print("checking if LOAD SCENARIO")
+    if form.load_scenario.data and form.load_scenario_name.data:
+        print('going to load scenario:'.ljust(pad1), ('scenarios/'+form.load_scenario_name.data))
+        rulesets.clear()
+        outfigs.clear()
+        active_rset = None
+        for k in pd.read_pickle('scenarios/'+form.load_scenario_name.data):
+            rulesets[k] = pd.read_pickle('scenarios/'+form.load_scenario_name.data)[k]
+        print("rulesets after load:", rulesets)
+        form.load_scenario.data = False
+        form.load_scenario_name.data = ""
+        form = make_form1(rulesets)
+
+
     if form.submit(): # I think it always is
         print('\nSubmission detected')
         active_rset = session.get('last_active_rset', None)
@@ -138,6 +154,7 @@ def home():
             outfigs.clear()
             active_rset = None
             print("rulesets after clear_all:".ljust(pad1), [n for n in rulesets])
+
 
         # iterate through the rulesets, deleting and updating
         print("\nPARSING FORM AND UPDATING RULESET")
@@ -158,8 +175,11 @@ def home():
             #   - set the function (lookup from func_table to get the right expression)
             print("setting r/func to:".ljust(pad1), func_table.get(form[r]['rfunc'].data, None))
             rulesets[r].func = func_table.get(form[r]['rfunc'].data, None)
+            print('setting func_str'.ljust(pad1), form[r]['rfunc'].data)
+            rulesets[r].func_str = form[r]['rfunc'].data
             print('params from form1:'.ljust(pad1), form[r]['params'].data)
             print('function in ruleset:'.ljust(pad1), rulesets[r].func)
+            print('function string in ruleset:'.ljust(pad1), rulesets[r].func_str)
             
             #   - copy parameters from form to f_args dict (actually param:arg pairs) in ruleset
             #       first need to variablise - do this first in the form, before updating the ruleset
@@ -200,10 +220,8 @@ def home():
                 form[r].plot_ruleset.data = False 
                 active_rset = rulesets[r].name
 
-
-
             # save if required
-            print("checking if SAVE")
+            print("checking if SAVE RULESET")
             if form[r].save_ruleset.data:
                 with open('rulesets/'+str(r)+'.pkl', 'wb') as f:
                     pickle.dump(rulesets[r], f, protocol=pickle.HIGHEST_PROTOCOL)
@@ -291,6 +309,23 @@ def home():
         print('RULESET AFTER PLOTTING')
         pprint.pprint(rulesets)
 
+    print("checking if SAVE SCENARIO")
+    if form.save_scenario.data and form.save_scenario_name.data:
+        print('going to save scenario:'.ljust(pad1), form.save_scenario_name.data)
+        with open('scenarios/'+form.save_scenario_name.data+'.pkl', 'wb') as f:
+            pickle.dump(rulesets, f, protocol=pickle.HIGHEST_PROTOCOL)
+        form.save_scenario.data = False
+        form.save_scenario_name.data = None
+
+    print("checking if LOAD SCENARIO")
+    if form.load_scenario.data and form.load_scenario_name.data:
+        print('going to load scenario:'.ljust(pad1), ('scenarios/'+form.load_scenario_name.data))
+        rulesets.clear()
+        outfigs.clear()
+        active_rset = None
+        for k in pd.read_pickle('scenarios/'+form.load_scenario_name.data):
+            rulesets[k] = pd.read_pickle('scenarios/'+form.load_scenario_name.data)[k]
+        print("rulesets after load:", rulesets)
 
     # 5. Call `make_form()` again, to make a new form based on the new ruleset dict structure
     # NB this will turn variables back to strings
@@ -323,6 +358,35 @@ def home():
         form.load_ruleset.data = False
         form.load_name.data = ""
 
+    # 6a update all form data if loading scenario
+
+    if form.load_scenario.data and form.load_scenario_name.data:
+        print('filling new scenario')
+        print('empty form is', )
+        pprint.pprint(form.data)
+
+        for r in rulesets:
+            print('in scenario', r)
+            form[r]['rname'].data = rulesets[r].name
+            
+            for i in rulesets[r].string_slice:
+                print("..in parameter".ljust(pad1), i)
+                print("..current contents:".ljust(pad1), form[r]['string_slice'][i].data)
+                form[r]['string_slice'][i].data = rulesets[r].string_slice[i]
+
+            for p in rulesets[r].f_args:
+                print("..in parameter".ljust(pad1), p)
+                print("..current contents:".ljust(pad1), form[r]['params'][p].data)
+                form[r]['params'][p].data = rulesets[r].f_args[p]
+
+            print("function in ruleset", rulesets[r].func)
+            form[r]['rfunc'].data = rulesets[r].func_str
+
+        form.load_scenario.data = False
+        form.load_scenario_name.data = ""
+
+
+
     
     pprint.pprint(form.data)
 
@@ -342,6 +406,15 @@ def home():
 @app.route('/test/')
 def test():
     return render_template('tests.html')
+
+@app.route('/scenarios/')
+def scenarios():
+    project = os.listdir('scenarios/')
+    # list for plotting
+    # get projection values
+    # make graph
+
+    return render_template('scenarios.html', project=project)
 
 if __name__ == '__main__':
     app.run()
