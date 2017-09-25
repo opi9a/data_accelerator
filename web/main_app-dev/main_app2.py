@@ -32,7 +32,7 @@ pad1 = 30
 
 phx_adj = 1.65 # pharmex omits a bunch of spend - this is the ave adjustment reqd
 
-scenario = {}
+scenario = {'name':'default', 'rulesets': {}, '_totals': None}
 
 rulesets = {}
 # rulesets['rs1'] = RuleSet.RuleSet(df, 'rs1')
@@ -119,28 +119,14 @@ def home():
 
     print("\n***************************CALLING APP *****************************")
 
-    print('\nINITIAL RULESETS')
-    pprint.pprint(rulesets)
+    print('\nINITIAL SCENARIO')
+    pprint.pprint(scenario)
     
     # 1. Initial call to `make_form()`
-    form = make_form1(rulesets)
+    form = make_form1(scenario['rulesets'])
 
     print('\nFORM AFTER INITIAL MAKE_FORM')
     pprint.pprint(form.data)
-
-
-    print("checking if LOAD SCENARIO")
-    if form.load_scenario.data and form.load_scenario_name.data:
-        print('going to load scenario:'.ljust(pad1), ('scenarios/'+form.load_scenario_name.data))
-        rulesets.clear()
-        outfigs.clear()
-        active_rset = None
-        for k in pd.read_pickle('scenarios/'+form.load_scenario_name.data):
-            rulesets[k] = pd.read_pickle('scenarios/'+form.load_scenario_name.data)[k]
-        print("rulesets after load:", rulesets)
-        form.load_scenario.data = False
-        form.load_scenario_name.data = ""
-        form = make_form1(rulesets)
 
 
     if form.submit(): # I think it always is
@@ -150,36 +136,36 @@ def home():
         # check for clear all
         if form.clear_all.data:
             print("3. Clearing all rulesets")
-            rulesets.clear()
+            scenario['rulesets'].clear()
             outfigs.clear()
             active_rset = None
-            print("rulesets after clear_all:".ljust(pad1), [n for n in rulesets])
+            print("rulesets after clear_all:".ljust(pad1), [n for n in scenario['rulesets']])
 
 
         # iterate through the rulesets, deleting and updating
         print("\nPARSING FORM AND UPDATING RULESET")
-        for r in rulesets:
+        for r in scenario['rulesets']:
 
             print('Now in:'.ljust(pad1), r)
 
             # 2. Delete any rulesets marked for deletion
             print("delete ruleset?",  form[r].delete_ruleset.data)
             if form[r].delete_ruleset.data:
-                print('deleting:'.ljust(pad1), rulesets[r].name)
-                del rulesets[r]
+                print('deleting:'.ljust(pad1), scenario['rulesets'][r].name)
+                del scenario['rulesets'][r]
                 active_rset = None
-                print('rulesets now:'.ljust(pad1), [n for n in rulesets])
+                print('rulesets now:'.ljust(pad1), [n for n in scenario['rulesets']])
                 break
 
             # 3. Of remaining rulesets, update data according to form fields (NB including r_func field)
             #   - set the function (lookup from func_table to get the right expression)
             print("setting r/func to:".ljust(pad1), func_table.get(form[r]['rfunc'].data, None))
-            rulesets[r].func = func_table.get(form[r]['rfunc'].data, None)
+            scenario['rulesets'][r].func = func_table.get(form[r]['rfunc'].data, None)
             print('setting func_str'.ljust(pad1), form[r]['rfunc'].data)
-            rulesets[r].func_str = form[r]['rfunc'].data
+            scenario['rulesets'][r].func_str = form[r]['rfunc'].data
             print('params from form1:'.ljust(pad1), form[r]['params'].data)
-            print('function in ruleset:'.ljust(pad1), rulesets[r].func)
-            print('function string in ruleset:'.ljust(pad1), rulesets[r].func_str)
+            print('function in ruleset:'.ljust(pad1), scenario['rulesets'][r].func)
+            print('function string in ruleset:'.ljust(pad1), scenario['rulesets'][r].func_str)
             
             #   - copy parameters from form to f_args dict (actually param:arg pairs) in ruleset
             #       first need to variablise - do this first in the form, before updating the ruleset
@@ -190,26 +176,26 @@ def home():
                 form[r]['params'][p].data = variablise(form[r]['params'][p].data)
 
             #    - now write to variablised param:args to the ruleset
-            rulesets[r].f_args = form[r]['params'].data
-            del rulesets[r].f_args['csrf_token']
+            scenario['rulesets'][r].f_args = form[r]['params'].data
+            del scenario['rulesets'][r].f_args['csrf_token']
 
-            print("f_args in ruleset:".ljust(pad1), rulesets[r].f_args)
+            print("f_args in ruleset:".ljust(pad1), scenario['rulesets'][r].f_args)
 
             #     - now set the index slice strings.  
 
-            rulesets[r].string_slice = form[r]['string_slice'].data
-            del rulesets[r].string_slice['csrf_token']
-            rulesets[r].slicify_string()
+            scenario['rulesets'][r].string_slice = form[r]['string_slice'].data
+            del scenario['rulesets'][r].string_slice['csrf_token']
+            scenario['rulesets'][r].slicify_string()
 
             # calculate and plot if reqd
             print("checking if PLOT")
             if form[r].plot_ruleset.data:
                 # try:  # NEED A FUNCTION FOR THIS (plotting, at least)
-                rulesets[r].xtrap(npers)
+                scenario['rulesets'][r].xtrap(npers)
                 print('xtrap returned')
-                fig = (rulesets[r].summed*phx_adj*12/1000000).plot(kind='Area', stacked='True', legend=True, figsize=(7,4), alpha=0.5).get_figure()
+                fig = (scenario['rulesets'][r].summed*phx_adj*12/1000000).plot(kind='Area', stacked='True', legend=True, figsize=(7,4), alpha=0.5).get_figure()
                 ts = int((datetime.now() - datetime(1970,1,1)).total_seconds())
-                outfig = str('static/'+ r + "_" + str(ts) + '.png')
+                outfig = str('static/scenarios/'+ r + "_" + str(ts) + '.png')
                 fig.savefig(outfig)
                 print("SAVING FIG AS:".ljust(pad1), outfig)
                 outfigs[r] = outfig
@@ -218,27 +204,27 @@ def home():
                 #     print("could not save", rulesets[r].name)
                 
                 form[r].plot_ruleset.data = False 
-                active_rset = rulesets[r].name
+                active_rset = scenario['rulesets'][r].name
 
             # save if required
             print("checking if SAVE RULESET")
             if form[r].save_ruleset.data:
                 with open('rulesets/'+str(r)+'.pkl', 'wb') as f:
-                    pickle.dump(rulesets[r], f, protocol=pickle.HIGHEST_PROTOCOL)
+                    pickle.dump(scenario['rulesets'][r], f, protocol=pickle.HIGHEST_PROTOCOL)
                 form[r].save_ruleset.data == False
-                active_rset = rulesets[r].name
+                active_rset = scenario['rulesets'][r].name
 
             # dump to xls if required
             print("checking if DUMPING to excel")
             if form[r].dump_rset_to_xls.data:
-                writer = pd.ExcelWriter('output/' + rulesets[r].name + '.xlsx')
-                rulesets[r].past.to_excel(writer, 'past')
-                rulesets[r].fut.to_excel(writer, 'fut')
-                rulesets[r].joined.to_excel(writer, 'joined')
-                rulesets[r].summed.to_excel(writer, 'summed')
+                writer = pd.ExcelWriter('output/' + scenario['rulesets'][r].name + '.xlsx')
+                scenario['rulesets'][r].past.to_excel(writer, 'past')
+                scenario['rulesets'][r].fut.to_excel(writer, 'fut')
+                scenario['rulesets'][r].joined.to_excel(writer, 'joined')
+                scenario['rulesets'][r].summed.to_excel(writer, 'summed')
                 writer.save()
                 form[r].dump_rset_to_xls.data == False
-                active_rset = rulesets[r].name
+                active_rset = scenario['rulesets'][r].name
 
 
         # 4. Create or load any new rulesets
@@ -246,9 +232,9 @@ def home():
         print("\nCHECKING FOR NEW RULESETS")     
         if form.add_ruleset.data and form.new_name.data:
             print('adding new ruleset:'.ljust(pad1), form.new_name.data)
-            print('number before:'.ljust(pad1), len(rulesets))
-            rulesets[form.new_name.data] = RuleSet.RuleSet(df,form.new_name.data)
-            print('number after:'.ljust(pad1), len(rulesets))
+            print('number before:'.ljust(pad1), len(scenario['rulesets']))
+            scenario['rulesets'][form.new_name.data] = RuleSet.RuleSet(df,form.new_name.data)
+            print('number after:'.ljust(pad1), len(scenario['rulesets']))
             active_rset = form.new_name.data
 
 
@@ -257,22 +243,21 @@ def home():
         print(form.load_ruleset.data, form.load_name.data)
         if form.load_ruleset.data and form.load_name.data:
             print('loading ruleset:'.ljust(pad1), form.load_name.data)
-            print('number before:'.ljust(pad1), len(rulesets))
+            print('number before:'.ljust(pad1), len(scenario['rulesets']))
             print('rulesets/'+str(form.load_name.data))
             print('loading as ', form.load_name.data.split('.')[0])
             try:
                 with open('rulesets/'+str(form.load_name.data), 'rb') as f:
-                    rulesets[form.load_name.data.split('.')[0]] = pickle.load(f)
+                    scenario['rulesets'][form.load_name.data.split('.')[0]] = pickle.load(f)
                     active_rset = form.load_name.data.split('.')[0]
 
             except:
                 print('could not open ', form.load_name.data)
-            print('number after:'.ljust(pad1), len(rulesets))
-
+            print('number after:'.ljust(pad1), len(scenario['rulesets']))
 
 
         print('\nFINAL RULESETS')
-        pprint.pprint(rulesets)
+        pprint.pprint(scenario['rulesets'])
 
 
     print('\nFORM BEFORE PLOT')
@@ -283,9 +268,9 @@ def home():
         ('form.plot_all.data is TRUE')
         # form.plot_all.data=False
         out_dfs = []
-        for r in rulesets:
-            print("\nPLOTTING:".ljust(pad1), rulesets[r].name)
-            out_dfs.append(rulesets[r].summed*phx_adj*12/1000000000)
+        for r in scenario['rulesets']:
+            print("\nPLOTTING:".ljust(pad1), scenario['rulesets'][r].name)
+            out_dfs.append(scenario['rulesets'][r].summed*phx_adj*12/1000000000)
             print('length of out_dfs:'.ljust(pad1), len(out_dfs))
 
         try:
@@ -297,7 +282,7 @@ def home():
                 figsize=(14,8), alpha=0.5).get_figure()
             
             ts = int((datetime.now() - datetime(1970,1,1)).total_seconds())
-            outfig = str('static/total_' + str(ts) + "_" + '.png')
+            outfig = str('static/scenarios/total_' + str(ts) + "_" + '.png')
             fig.savefig(outfig)
             outfigs['total'] = outfig
             active_rset = 'total'
@@ -307,32 +292,58 @@ def home():
             print("couldn't make a total plot / figure")
 
         print('RULESET AFTER PLOTTING')
-        pprint.pprint(rulesets)
+        pprint.pprint(scenario['rulesets'])
 
     print("checking if SAVE SCENARIO")
     if form.save_scenario.data and form.save_scenario_name.data:
+        scenario['name'] = form.save_scenario_name.data
+        scen_dir = os.path.join('static/scenarios/',scenario['name'])
+        if not os.path.exists(scen_dir):
+            os.makedirs(scen_dir)
+
+        scen_save_path = os.path.join(scen_dir, 'scenario.pkl')
+
         print('going to save scenario:'.ljust(pad1), form.save_scenario_name.data)
-        with open('scenarios/'+form.save_scenario_name.data+'.pkl', 'wb') as f:
-            pickle.dump(rulesets, f, protocol=pickle.HIGHEST_PROTOCOL)
+        with open(scen_save_path, 'wb') as f:
+            pickle.dump(scenario, f, protocol=pickle.HIGHEST_PROTOCOL)
         form.save_scenario.data = False
         form.save_scenario_name.data = None
 
     print("checking if LOAD SCENARIO")
     if form.load_scenario.data and form.load_scenario_name.data:
-        print('going to load scenario:'.ljust(pad1), ('scenarios/'+form.load_scenario_name.data))
-        rulesets.clear()
+        scen_load_path = os.path.join('static/scenarios', form.load_scenario_name.data, 'scenario.pkl')
+        print('going to load scenario:'.ljust(pad1), scen_load_path)
+        scenario['rulesets'].clear()
         outfigs.clear()
         active_rset = None
-        for k in pd.read_pickle('scenarios/'+form.load_scenario_name.data):
-            rulesets[k] = pd.read_pickle('scenarios/'+form.load_scenario_name.data)[k]
-        print("rulesets after load:", rulesets)
+
+        for k in pd.read_pickle(scen_load_path)['rulesets']:
+            print('k is ', k)
+            scenario['rulesets'][k] = pd.read_pickle(scen_load_path)['rulesets'][k]
+        
+        scenario['name'] = form.load_scenario_name.data
+        print("scenario after load:", scenario)
+        form.load_scenario.data = False
+        form.load_scenario_name.data = ""
+        form = make_form1(scenario['rulesets'])
+
+
+    # print("checking if LOAD SCENARIO")
+    # if form.load_scenario.data and form.load_scenario_name.data:
+    #     print('going to load scenario:'.ljust(pad1), ('scenarios/'+form.load_scenario_name.data))
+    #     scenario['rulesets'].clear()
+    #     outfigs.clear()
+    #     active_rset = None
+    #     for k in pd.read_pickle('scenarios/'+form.load_scenario_name.data):
+    #         scenario['rulesets'][k] = pd.read_pickle('scenarios/'+form.load_scenario_name.data)[k]
+    #     print("rulesets after load:", scenario['rulesets'])
 
     # 5. Call `make_form()` again, to make a new form based on the new ruleset dict structure
     # NB this will turn variables back to strings
     # turn off flags etc?
     print("\nRE-MAKING FORM FROM RULESETS")
     form = None
-    form = make_form1(rulesets)
+    form = make_form1(scenario['rulesets'])
 
     # 6. Update form data
     if form.load_ruleset.data and form.load_name.data:
@@ -340,21 +351,21 @@ def home():
         f = form.load_name.data.split('.')[0]
         print(f)
         print(form.data[f])
-        print(rulesets[f])
-        form[f]['rname'].data = rulesets[f].name
+        print(scenario['rulesets'][f])
+        form[f]['rname'].data = scenario['rulesets'][f].name
 
-        for i in rulesets[f].string_slice:
+        for i in scenario['rulesets'][f].string_slice:
             print("..in parameter".ljust(pad1), i)
             print("..current contents:".ljust(pad1), form[f]['string_slice'][i].data)
-            form[f]['string_slice'][i].data = rulesets[f].string_slice[i]
+            form[f]['string_slice'][i].data = scenario['rulesets'][f].string_slice[i]
 
-        for p in rulesets[f].f_args:
+        for p in scenario['rulesets'][f].f_args:
             print("..in parameter".ljust(pad1), p)
             print("..current contents:".ljust(pad1), form[f]['params'][p].data)
-            form[f]['params'][p].data = rulesets[f].f_args[p]
+            form[f]['params'][p].data = scenario['rulesets'][f].f_args[p]
         print('looking up ruleset func in func_table', 
-            [k for k in func_table if func_table[k]==rulesets[f].func][0])
-        form[f]['rfunc'].data = [k for k in func_table if func_table[k]==rulesets[f].func][0]
+            [k for k in func_table if func_table[k]==scenario['rulesets'][f].func][0])
+        form[f]['rfunc'].data = [k for k in func_table if func_table[k]==scenario['rulesets'][f].func][0]
         form.load_ruleset.data = False
         form.load_name.data = ""
 
@@ -365,22 +376,22 @@ def home():
         print('empty form is', )
         pprint.pprint(form.data)
 
-        for r in rulesets:
+        for r in scenario['rulesets']:
             print('in scenario', r)
-            form[r]['rname'].data = rulesets[r].name
+            form[r]['rname'].data = scenario['rulesets'][r].name
             
-            for i in rulesets[r].string_slice:
+            for i in scenario['rulesets'][r].string_slice:
                 print("..in parameter".ljust(pad1), i)
                 print("..current contents:".ljust(pad1), form[r]['string_slice'][i].data)
-                form[r]['string_slice'][i].data = rulesets[r].string_slice[i]
+                form[r]['string_slice'][i].data = scenario['rulesets'][r].string_slice[i]
 
-            for p in rulesets[r].f_args:
+            for p in scenario['rulesets'][r].f_args:
                 print("..in parameter".ljust(pad1), p)
                 print("..current contents:".ljust(pad1), form[r]['params'][p].data)
-                form[r]['params'][p].data = rulesets[r].f_args[p]
+                form[r]['params'][p].data = scenario['rulesets'][r].f_args[p]
 
-            print("function in ruleset", rulesets[r].func)
-            form[r]['rfunc'].data = rulesets[r].func_str
+            print("function in ruleset", scenario['rulesets'][r].func)
+            form[r]['rfunc'].data = scenario['rulesets'][r].func_str
 
         form.load_scenario.data = False
         form.load_scenario_name.data = ""
@@ -393,7 +404,7 @@ def home():
 
     form['add_ruleset'].data = False
     form['new_name'].data = ""
-    for r in rulesets: # why do I need to do this?
+    for r in scenario['rulesets']: # why do I need to do this?
         form[r]['rname'].data = r
     
     print("Outfigs dict:".ljust(pad1), outfigs)
@@ -401,7 +412,7 @@ def home():
     session['last_active_rset'] = active_rset
 
     return render_template('main_template1.html', form=form, active_rset=active_rset,
-                                rulesets=[n for n in rulesets], outfigs=outfigs)
+                                rulesets=[n for n in scenario['rulesets']], outfigs=outfigs)
 
 @app.route('/test/')
 def test():

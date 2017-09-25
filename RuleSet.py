@@ -31,6 +31,7 @@ class RuleSet:
         self.join_output=join_output
         self.joined = None
         self.summed = None
+        self.out_fig = ""
 
        
     def set_slice(self, input_slice):

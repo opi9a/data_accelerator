@@ -24,7 +24,7 @@ def make_form1(rulesets, rfuncs=['','r_profile', 'r_tprofile', 'r_terminal', 'r_
         load_name = SelectField(choices=[("","")] + list(zip(os.listdir('rulesets/'),os.listdir('rulesets/'))))
 
         load_scenario = SubmitField('load a scenario')
-        load_scenario_name = SelectField(choices=[("","")] + list(zip(os.listdir('scenarios/'),os.listdir('scenarios/'))))
+        load_scenario_name = SelectField(choices=[("","")] + list(zip(os.listdir('static/scenarios/'),os.listdir('static/scenarios/'))))
         save_scenario = SubmitField('save this scenario')
         save_scenario_name = StringField('scenario name', default=None)
 
