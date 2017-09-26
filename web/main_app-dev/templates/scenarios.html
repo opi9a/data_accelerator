@@ -4,12 +4,17 @@
 
 <!-- first print out list of rulesets, plus total element -->
 
-<div class="container-fluid top_background">
+<div class="container-fluid">
   <p>Available Scenarios</p>
   {% for p in project %}
   <p>{{ p }}</p>
   {% endfor %}
 </div>
+
+<div class="container-fluid">
+    <img src={{ outfig }}>
+</div>
+
 
 
 {% endblock %}

@@ -5,7 +5,7 @@
 <!-- first print out list of rulesets, plus total element -->
 
 <div class="container-fluid top_background">
-  <p></p>
+  <p class="bottom_background" align="right" ="min-width:550px" ><nobr>Scenario Name:  {{scen_name}}</p>
   {% for r in rulesets %}
   <button id={{ r }} class='top_button'>{{ r }}</button>
   {% endfor %}
@@ -254,6 +254,7 @@ $(document).ready(function(){
 .bottom_background {
     background:#dddddd;
     padding-top: 10px;
+    padding-bottom: 0px;
     margin-bottom: 0;
 } 
 

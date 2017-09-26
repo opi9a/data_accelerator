@@ -52,9 +52,14 @@ def plot_rset(scen_name, rset, npers=npers):
     print('xtrap returned')
     fig = (rset.summed*phx_adj*12/1000000).plot(legend=True, figsize=(7,4), alpha=0.5).get_figure()
     ts = int((datetime.now() - datetime(1970,1,1)).total_seconds())
-    fig_path = os.path.join('static/scenarios', scen_name, rset.name + str(ts) + '.png') 
+    scen_dir = os.path.join('static/scenarios', scen_name) 
+    fig_path = os.path.join(scen_dir, rset.name + str(ts) + '.png') 
     print('fig path is '.ljust(pad1), fig_path)
     rset.out_fig = fig_path
+    for f in os.listdir(scen_dir):
+        if f.startswith(rset.name) and f.endswith('.png'):
+            print("removing", os.path.join(scen_dir, f))
+            os.remove(os.path.join(scen_dir, f))
     fig.savefig(fig_path)
     print("SAVING FIG AS:".ljust(pad1), fig_path) 
 
@@ -149,6 +154,8 @@ def home():
         if form.clear_all.data:
             print("3. Clearing all rulesets")
             scenario['rulesets'].clear()
+            scenario['name'] = 'default'
+            scenario['_totals'] = None
             outfigs.clear()
             active_rset = None
 
@@ -279,6 +286,9 @@ def home():
         ('form.plot_all.data is TRUE')
         # form.plot_all.data=False
         out_dfs = []
+        scen_dir = os.path.join('static/scenarios', scenario['name']) 
+        
+        # go through the rulesets and collect the summed projections
         for r in scenario['rulesets']:
             # first check the ruleset has been plotted
             if scenario['rulesets'][r].out_fig == "":
@@ -290,20 +300,35 @@ def home():
             out_dfs.append(scenario['rulesets'][r].summed*phx_adj*12/1000000000)
             print('length of out_dfs:'.ljust(pad1), len(out_dfs))
 
+        # make a df of the collected sums, save as csv/pkl and plot it
         try:
             print('out_df list is: '.ljust(pad1), out_dfs)
             df_concat = pd.concat(out_dfs, axis=1)
             print('concatted, with shape '.ljust(pad1), len(df_concat))
-            df_concat.to_csv('output/dfconcat.csv')
+            df_concat.to_csv(os.path.join(scen_dir, 'dfconcat.csv'))
+            df_concat.to_pickle(os.path.join(scen_dir, 'dfconcat.pkl'))
             fig = df_concat.plot(kind='Area', stacked='True', legend=True, 
                 figsize=(14,8), alpha=0.5).get_figure()
             
             ts = int((datetime.now() - datetime(1970,1,1)).total_seconds())
-            outfig = os.path.join('static/scenarios', scenario['name'], 'total_' + str(ts) + "_" + '.png')
+            
+            outfig = os.path.join(scen_dir, 'total_' + str(ts) + "_" + '.png')
+
+            print('looking for old plots to delete')
+            for f in os.listdir(scen_dir):
+                if f.startswith('total_') and f.endswith('.png'):
+                    print("removing", os.path.join(scen_dir, f))
+                    os.remove(os.path.join(scen_dir, f))
+
+            # plot it
             fig.savefig(outfig)
             outfigs['total'] = outfig
             active_rset = 'total'
             print("saving TOTAL fig as:".ljust(pad1), outfig)       
+
+            # now generate the scenario sum
+            df_concat.sum(axis=1).to_pickle(os.path.join(scen_dir, 'scen_sum.pkl'))
+
 
         except:
             print("couldn't make a total plot / figure")
@@ -428,7 +453,7 @@ def home():
 
     session['last_active_rset'] = active_rset
 
-    return render_template('main_template1.html', form=form, active_rset=active_rset,
+    return render_template('main_template1.html', form=form, active_rset=active_rset, scen_name=scenario['name'],
                                 rulesets=[n for n in scenario['rulesets']], outfigs=outfigs)
 
 @app.route('/test/')
@@ -437,12 +462,44 @@ def test():
 
 @app.route('/scenarios/')
 def scenarios():
-    project = os.listdir('scenarios/')
+    scen_list = os.listdir('static/scenarios/')
+    scen_sums = []
+    for p in scen_list:
+        scen_sum_path = os.path.join('static/scenarios', p, 'scen_sum.pkl')
+        print("opening ", scen_sum_path)
+        try:
+            scen_in = pd.read_pickle(scen_sum_path)
+            scen_sums.append(pd.DataFrame(scen_in))
+        except:
+            print('could not open ', p, ' for concatting')
+
+    df = pd.concat(scen_sums)
+    print(df)
+
+    proj_path = 'static/project'
+    df.to_csv(os.path.join(proj_path, 'project_data.csv'))
+    df.to_pickle(os.path.join(proj_path, 'project_data.pkl'))
+    fig = df.plot(legend=True, figsize=(14,8), alpha=0.5).get_figure()
+    
+    ts = int((datetime.now() - datetime(1970,1,1)).total_seconds())
+    
+    outfig = os.path.join(proj_path, 'project_' + str(ts) + "_" + '.png')
+
+    print('looking for old plots to delete')
+    for f in os.listdir(proj_path):
+        if f.startswith('project_') and f.endswith('.png'):
+            print("removing", os.path.join(proj_path, f))
+            os.remove(os.path.join(proj_path, f))
+
+    # plot it
+    fig.savefig(outfig)
+
     # list for plotting
     # get projection values
     # make graph
 
-    return render_template('scenarios.html', project=project)
+    return render_template('scenarios.html', project=scen_list, 
+            outfig=os.path.join("../", outfig))
 
 if __name__ == '__main__':
     app.run()
