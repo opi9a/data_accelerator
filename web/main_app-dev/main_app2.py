@@ -47,6 +47,17 @@ func_table={'r_profile':r_funcs.r_profile,
 outfigs={} 
 
 
+def plot_rset(scen_name, rset, npers=npers):
+    rset.xtrap(npers)
+    print('xtrap returned')
+    fig = (rset.summed*phx_adj*12/1000000).plot(legend=True, figsize=(7,4), alpha=0.5).get_figure()
+    ts = int((datetime.now() - datetime(1970,1,1)).total_seconds())
+    fig_path = os.path.join('static/scenarios', scen_name, rset.name + str(ts) + '.png') 
+    print('fig path is '.ljust(pad1), fig_path)
+    rset.out_fig = fig_path
+    fig.savefig(fig_path)
+    print("SAVING FIG AS:".ljust(pad1), fig_path) 
+
 
 @app.route('/', methods=['GET', 'POST'])
 def home():
@@ -133,14 +144,13 @@ def home():
         print('\nSubmission detected')
         active_rset = session.get('last_active_rset', None)
         print('active rset'.ljust(pad1), active_rset)
+        
         # check for clear all
         if form.clear_all.data:
             print("3. Clearing all rulesets")
             scenario['rulesets'].clear()
             outfigs.clear()
             active_rset = None
-            print("rulesets after clear_all:".ljust(pad1), [n for n in scenario['rulesets']])
-
 
         # iterate through the rulesets, deleting and updating
         print("\nPARSING FORM AND UPDATING RULESET")
@@ -149,7 +159,6 @@ def home():
             print('Now in:'.ljust(pad1), r)
 
             # 2. Delete any rulesets marked for deletion
-            print("delete ruleset?",  form[r].delete_ruleset.data)
             if form[r].delete_ruleset.data:
                 print('deleting:'.ljust(pad1), scenario['rulesets'][r].name)
                 del scenario['rulesets'][r]
@@ -190,19 +199,21 @@ def home():
             # calculate and plot if reqd
             print("checking if PLOT")
             if form[r].plot_ruleset.data:
-                # try:  # NEED A FUNCTION FOR THIS (plotting, at least)
-                scenario['rulesets'][r].xtrap(npers)
-                print('xtrap returned')
-                fig = (scenario['rulesets'][r].summed*phx_adj*12/1000000).plot(kind='Area', stacked='True', legend=True, figsize=(7,4), alpha=0.5).get_figure()
-                ts = int((datetime.now() - datetime(1970,1,1)).total_seconds())
-                outfig = str('static/scenarios/'+ r + "_" + str(ts) + '.png')
-                fig.savefig(outfig)
-                print("SAVING FIG AS:".ljust(pad1), outfig)
-                outfigs[r] = outfig
-                print("Outfigs dict:".ljust(pad1), outfigs)
-                # except: 
-                #     print("could not save", rulesets[r].name)
-                
+                plot_rset(scenario['name'], scenario['rulesets'][r])                
+                # # try:  # NEED A FUNCTION FOR THIS (plotting, at least)
+                # scenario['rulesets'][r].xtrap(npers)
+                # print('xtrap returned')
+                # fig = (scenario['rulesets'][r].summed*phx_adj*12/1000000).plot(kind='Area', stacked='True', legend=True, figsize=(7,4), alpha=0.5).get_figure()
+                # ts = int((datetime.now() - datetime(1970,1,1)).total_seconds())
+                # outfig = str('static/scenarios/'+ r + "_" + str(ts) + '.png')
+                # fig.savefig(outfig)
+                # print("SAVING FIG AS:".ljust(pad1), outfig)
+                # outfigs[r] = outfig
+                # print("Outfigs dict:".ljust(pad1), outfigs)
+                # # except: 
+                # #     print("could not save", rulesets[r].name)
+                outfigs[r] = scenario['rulesets'][r].out_fig
+                print("set outfigs dict entry to".ljust(pad1), outfigs[r])
                 form[r].plot_ruleset.data = False 
                 active_rset = scenario['rulesets'][r].name
 
@@ -269,7 +280,13 @@ def home():
         # form.plot_all.data=False
         out_dfs = []
         for r in scenario['rulesets']:
-            print("\nPLOTTING:".ljust(pad1), scenario['rulesets'][r].name)
+            # first check the ruleset has been plotted
+            if scenario['rulesets'][r].out_fig == "":
+                print("\Trying to plot uncalculated rset:".ljust(pad1), scenario['rulesets'][r].name)
+                plot_rset(scenario['name'], scenario['rulesets'][r])
+                outfigs[r] = scenario['rulesets'][r].out_fig
+                print("plotted - set outfigs dict entry to".ljust(pad1), outfigs[r])
+            
             out_dfs.append(scenario['rulesets'][r].summed*phx_adj*12/1000000000)
             print('length of out_dfs:'.ljust(pad1), len(out_dfs))
 
@@ -282,7 +299,7 @@ def home():
                 figsize=(14,8), alpha=0.5).get_figure()
             
             ts = int((datetime.now() - datetime(1970,1,1)).total_seconds())
-            outfig = str('static/scenarios/total_' + str(ts) + "_" + '.png')
+            outfig = os.path.join('static/scenarios', scenario['name'], 'total_' + str(ts) + "_" + '.png')
             fig.savefig(outfig)
             outfigs['total'] = outfig
             active_rset = 'total'
