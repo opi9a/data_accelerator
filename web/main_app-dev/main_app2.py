@@ -26,7 +26,7 @@ df = pd.read_pickle('c:/Users/groberta/Work/data_accelerator/spend_data_proc/dfs
 cutoff = pd.Period('3-2014', freq='M')
 npers = 120
 
-plt.style.use('seaborn')
+plt.style.use('default')
 
 pad1 = 30
 
@@ -41,7 +41,8 @@ func_table={'r_profile':r_funcs.r_profile,
         'r_terminal':r_funcs.r_terminal, 
         'r_trend':r_funcs.r_trend, 
         'r_fut':r_funcs.r_fut, 
-        'r_fut_tr':r_funcs.r_fut_tr}
+        'r_fut_tr':r_funcs.r_fut_tr,
+        'r_trend_old': r_funcs.r_trend_old}
         # NB currently need to hard code these options in make_form1(), to get in the SelectField
 
 outfigs={} 
@@ -50,7 +51,32 @@ outfigs={}
 def plot_rset(scen_name, rset, npers=npers):
     rset.xtrap(npers)
     print('xtrap returned')
-    fig = (rset.summed*phx_adj*12/1000000).plot(legend=True, figsize=(7,4), alpha=0.5).get_figure()
+    sum_data = rset.summed*phx_adj*12/1000000
+    ind1 = rset.summed.index.to_timestamp()
+
+    fig, axs = plt.subplots(1,2, figsize=(12,5))
+
+    axs[0].spines['top'].set_visible(False)
+    axs[0].spines['right'].set_visible(False)
+    axs[0].plot(ind1, sum_data)
+    axs[0].set_ylim(0)
+    axs[0].set_ylabel('£m pa (annualised rate)')
+
+    # hack to test if this is future - which is a different shape
+
+    if rset.joined.shape[1] > 1:   
+        data2 = (rset.joined*phx_adj*12/1000000)
+        ind2 = rset.joined.columns.to_timestamp()
+
+    else: 
+        data2 = rset.past*phx_adj*12/1000000
+        ind2 = rset.past.columns.to_timestamp()
+
+    axs[1].spines['top'].set_visible(False)
+    axs[1].spines['right'].set_visible(False)
+    axs[1].plot(ind2, data2.T)
+    axs[1].set_ylim(0)
+
     ts = int((datetime.now() - datetime(1970,1,1)).total_seconds())
     scen_dir = os.path.join('static/scenarios', scen_name) 
     fig_path = os.path.join(scen_dir, rset.name + str(ts) + '.png') 
@@ -207,18 +233,6 @@ def home():
             print("checking if PLOT")
             if form[r].plot_ruleset.data:
                 plot_rset(scenario['name'], scenario['rulesets'][r])                
-                # # try:  # NEED A FUNCTION FOR THIS (plotting, at least)
-                # scenario['rulesets'][r].xtrap(npers)
-                # print('xtrap returned')
-                # fig = (scenario['rulesets'][r].summed*phx_adj*12/1000000).plot(kind='Area', stacked='True', legend=True, figsize=(7,4), alpha=0.5).get_figure()
-                # ts = int((datetime.now() - datetime(1970,1,1)).total_seconds())
-                # outfig = str('static/scenarios/'+ r + "_" + str(ts) + '.png')
-                # fig.savefig(outfig)
-                # print("SAVING FIG AS:".ljust(pad1), outfig)
-                # outfigs[r] = outfig
-                # print("Outfigs dict:".ljust(pad1), outfigs)
-                # # except: 
-                # #     print("could not save", rulesets[r].name)
                 outfigs[r] = scenario['rulesets'][r].out_fig
                 print("set outfigs dict entry to".ljust(pad1), outfigs[r])
                 form[r].plot_ruleset.data = False 
@@ -235,12 +249,15 @@ def home():
             # dump to xls if required
             print("checking if DUMPING to excel")
             if form[r].dump_rset_to_xls.data:
-                writer = pd.ExcelWriter('output/' + scenario['rulesets'][r].name + '.xlsx')
+                out_root = os.path.join('static/scenarios', scenario['name'], scenario['rulesets'][r].name) 
+                writer = pd.ExcelWriter(out_root + ".xlsx")
                 scenario['rulesets'][r].past.to_excel(writer, 'past')
                 scenario['rulesets'][r].fut.to_excel(writer, 'fut')
                 scenario['rulesets'][r].joined.to_excel(writer, 'joined')
                 scenario['rulesets'][r].summed.to_excel(writer, 'summed')
                 writer.save()
+                with open("".join([out_root, ".pkl"]), 'wb') as f:
+                    pickle.dump(scenario['rulesets'][r], f, protocol=pickle.HIGHEST_PROTOCOL)                
                 form[r].dump_rset_to_xls.data == False
                 active_rset = scenario['rulesets'][r].name
 
@@ -277,14 +294,9 @@ def home():
         print('\nFINAL RULESETS')
         pprint.pprint(scenario['rulesets'])
 
-
-    print('\nFORM BEFORE PLOT')
-    pprint.pprint(form.data)
-    print('\nplot all flag:'.ljust(pad1), form.plot_all.data)
-
+    # plot all if flagged
     if form.plot_all.data==True: 
         ('form.plot_all.data is TRUE')
-        # form.plot_all.data=False
         out_dfs = []
         scen_dir = os.path.join('static/scenarios', scenario['name']) 
         
@@ -301,37 +313,48 @@ def home():
             print('length of out_dfs:'.ljust(pad1), len(out_dfs))
 
         # make a df of the collected sums, save as csv/pkl and plot it
-        try:
-            print('out_df list is: '.ljust(pad1), out_dfs)
-            df_concat = pd.concat(out_dfs, axis=1)
-            print('concatted, with shape '.ljust(pad1), len(df_concat))
-            df_concat.to_csv(os.path.join(scen_dir, 'dfconcat.csv'))
-            df_concat.to_pickle(os.path.join(scen_dir, 'dfconcat.pkl'))
-            fig = df_concat.plot(kind='Area', stacked='True', legend=True, 
-                figsize=(14,8), alpha=0.5).get_figure()
-            
-            ts = int((datetime.now() - datetime(1970,1,1)).total_seconds())
-            
-            outfig = os.path.join(scen_dir, 'total_' + str(ts) + "_" + '.png')
+        # try:
+        print('out_df list is: '.ljust(pad1), out_dfs)
+        df_concat = pd.concat(out_dfs, axis=1)
+        print('concatted, with shape '.ljust(pad1), len(df_concat))
+        df_concat.to_csv(os.path.join(scen_dir, 'dfconcat.csv'))
+        df_concat.to_pickle(os.path.join(scen_dir, 'dfconcat.pkl'))
+        
+        fig, ax = plt.subplots(figsize=(14,8))
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        print('made axes')
+        ax.stackplot(df_concat.index.to_timestamp(), 
+            [df_concat.reset_index(drop=True).iloc[:,c] for c in range(len(df_concat.columns))],
+            alpha=0.5)
 
-            print('looking for old plots to delete')
-            for f in os.listdir(scen_dir):
-                if f.startswith('total_') and f.endswith('.png'):
-                    print("removing", os.path.join(scen_dir, f))
-                    os.remove(os.path.join(scen_dir, f))
+        ax.set_ylim(0)
+        ax.set_ylabel('£bn pa (annualised)')
+        ax.legend(df_concat.columns,  bbox_to_anchor=[0.2, 0.8])
 
-            # plot it
-            fig.savefig(outfig)
-            outfigs['total'] = outfig
-            active_rset = 'total'
-            print("saving TOTAL fig as:".ljust(pad1), outfig)       
+        
+        ts = int((datetime.now() - datetime(1970,1,1)).total_seconds())
+        
+        outfig = os.path.join(scen_dir, 'total_' + str(ts) + "_" + '.png')
 
-            # now generate the scenario sum
-            df_concat.sum(axis=1).to_pickle(os.path.join(scen_dir, 'scen_sum.pkl'))
+        print('looking for old plots to delete')
+        for f in os.listdir(scen_dir):
+            if f.startswith('total_') and f.endswith('.png'):
+                print("removing", os.path.join(scen_dir, f))
+                os.remove(os.path.join(scen_dir, f))
+
+        # plot it
+        fig.savefig(outfig)
+        outfigs['total'] = outfig
+        active_rset = 'total'
+        print("saving TOTAL fig as:".ljust(pad1), outfig)       
+
+        # now generate the scenario sum
+        df_concat.sum(axis=1).to_pickle(os.path.join(scen_dir, 'scen_sum.pkl'))
 
 
-        except:
-            print("couldn't make a total plot / figure")
+        # except:
+        #     print("couldn't make a total plot / figure")
 
         print('RULESET AFTER PLOTTING')
         pprint.pprint(scenario['rulesets'])
@@ -369,16 +392,6 @@ def home():
         form.load_scenario_name.data = ""
         form = make_form1(scenario['rulesets'])
 
-
-    # print("checking if LOAD SCENARIO")
-    # if form.load_scenario.data and form.load_scenario_name.data:
-    #     print('going to load scenario:'.ljust(pad1), ('scenarios/'+form.load_scenario_name.data))
-    #     scenario['rulesets'].clear()
-    #     outfigs.clear()
-    #     active_rset = None
-    #     for k in pd.read_pickle('scenarios/'+form.load_scenario_name.data):
-    #         scenario['rulesets'][k] = pd.read_pickle('scenarios/'+form.load_scenario_name.data)[k]
-    #     print("rulesets after load:", scenario['rulesets'])
 
     # 5. Call `make_form()` again, to make a new form based on the new ruleset dict structure
     # NB this will turn variables back to strings
@@ -462,25 +475,34 @@ def test():
 
 @app.route('/scenarios/')
 def scenarios():
-    scen_list = os.listdir('static/scenarios/')
-    scen_sums = []
+    scen_list = [s for s in os.listdir('static/scenarios/') if s !='default']
+    df = pd.DataFrame()
+    proj_path = 'static/project'
+
+    print('list of scenarios:', scen_list)
     for p in scen_list:
         scen_sum_path = os.path.join('static/scenarios', p, 'scen_sum.pkl')
         print("opening ", scen_sum_path)
         try:
             scen_in = pd.read_pickle(scen_sum_path)
-            scen_sums.append(pd.DataFrame(scen_in))
+            print('found a sum with lenght: ', len(scen_in))
+            df[p]=scen_in
+            print('sums appended now: ', len(scen_sums))
         except:
             print('could not open ', p, ' for concatting')
 
-    df = pd.concat(scen_sums)
-    print(df)
-
-    proj_path = 'static/project'
+  
     df.to_csv(os.path.join(proj_path, 'project_data.csv'))
     df.to_pickle(os.path.join(proj_path, 'project_data.pkl'))
-    fig = df.plot(legend=True, figsize=(14,8), alpha=0.5).get_figure()
-    
+
+    fig, ax = plt.subplots(figsize=(12,6))
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    for c in range(len(df.columns)):
+        ax.plot(df.index.to_timestamp(), df.iloc[:,c])
+    ax.set_ylim(0)
+    ax.set_ylabel('£bn pa (annualised)')
+   
     ts = int((datetime.now() - datetime(1970,1,1)).total_seconds())
     
     outfig = os.path.join(proj_path, 'project_' + str(ts) + "_" + '.png')
