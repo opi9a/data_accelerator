@@ -7,11 +7,102 @@ Created on Fri Aug 11 14:50:32 2017
 
 import pandas as pd
 import numpy as np
+from matplotlib import pyplot as plt
+import os
+import r_funcs as rf
+
+
+###_________________________________________________________________________###
+
+
+def plot_projs(rs_in, num_plots, out_path="", ma_interval=12):
+    '''
+    For an input ruleset, generates informative plots of individual products
+    '''
+       
+    # get the various datasets
+    past_df = rs_in.past
+    fut_df = rs_in.fut
+    joined_df = rs_in.joined
+    
+    # if there are relevant arguments to infer_launch(), get them
+    if 'streak_len_thresh' in rs_in.f_args: streak_len_thresh = rs_in.f_args['streak_len_thresh']
+    if 'delta_thresh' in rs_in.f_args: delta_thresh = rs_in.f_args['delta_thresh']
+    if 'uptake_dur' in rs_in.f_args: uptake_dur = rs_in.f_args['uptake_dur']
+    if 'plat_dur' in rs_in.f_args: plat_dur = rs_in.f_args['plat_dur']
+    if 'threshold_rate' in rs_in.f_args: threshold_rate = rs_in.f_args['threshold_rate']
+    # Note this last one has underscore in present function
+    if 'ma_interval' in rs_in.f_args: _ma_interval = rs_in.f_args['ma_interval']
+    
+    # make sure don't go beyond available products
+    num_plots = min(num_plots, len(past_df))  
+    
+    # need these pads to fill out series for plotting later
+    past_pad = len(joined_df.T) - len(past_df.T)
+    fut_pad = len(joined_df.T) - len(fut_df.T)
+    
+    # make the selection, ordering by max sales *ever* (not just in past)
+    subset = fut_df.max(axis=1).sort_values(ascending=False).head(num_plots).index.get_level_values(level=0)
+    past_df = past_df.loc[list(subset),:]
+    fut_df = past_df.loc[list(subset),:]
+    
+    fig, axs = plt.subplots(num_plots, 1, figsize=(10,5*num_plots))
+    ind = joined_df.columns.to_timestamp()
+
+    for i,p in enumerate(subset):
+
+        # can't believe it's this hard to get max_sales out of the index
+        max_sales = past_df.loc[p].index.get_level_values(past_df.index.names.index('max_sales')-1)[0]
+        uptake_out = rf.infer_launch(past_df.loc[p].values, max_sales, return_dict=True, _debug=False)
+
+        # basic plot of joined (i.e. past plus future)
+        axs[i].plot(ind, joined_df.loc[p].T, label = 'actual and future spend')
+        
+        # moving average
+        ma = mov_ave(past_df.loc[p], ma_interval)
+        axs[i].plot(ind, np.append(ma,[np.nan]*past_pad), label= 'moving average, interval: ' + str(_ma_interval))
+        
+        # lagged moving average - useful for identifying patterns
+        lagged_ma = ma - np.insert(ma, 0, np.zeros(ma_interval))[:-ma_interval]
+        axs[i].plot(ind, np.append(lagged_ma,[np.nan]*past_pad), label = 'moving diff in moving average')
+           
+        # show detected streaks as shaded regions
+        if uptake_out['uptake_detected']:
+            for s in uptake_out['streaks']:
+                up_end = uptake_out['streaks'][s]['end_per']
+                up_start = up_end - uptake_out['streaks'][s]['length'] - int(ma_interval/2)
+
+                axs[i].axvspan(ind[up_start], ind[up_end], alpha=0.1)
+        
+        axs[i].spines['top'].set_visible(False)
+        axs[i].spines['right'].set_visible(False)
+        axs[i].spines['bottom'].set_position('zero')
+        axs[i].set_title(p)
+        if (i%5 == 0): axs[i].legend()
+        
+    fig.savefig(os.path.join(out_path,rs_in.name + '_plots.png'))
 
 
 ###_________________________________________________________________________###
 
 def mov_ave(in_arr, window):
+    '''Parameters:  
+        
+            in_arr: an input array (numpy, or anything that can be coerced by np.array())
+            window: the window over which to make the moving average
+
+
+        Return:
+
+            array of same length as in_arr, with mov ave
+    '''
+    
+    # first coerce to numpy array 
+    in_arr = np.array(in_arr)    
+
+    # now turn nans to zero
+    in_arr[np.isnan(in_arr)]=0
+
     a = np.cumsum(in_arr) # total cumulative sum
     b=(np.cumsum(in_arr)[:-window]) # shifted forward, overlap truncated
     c = np.insert(b,0,np.zeros(window))  # start filled to get to line up

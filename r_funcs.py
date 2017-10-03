@@ -17,6 +17,32 @@ TODO: document the API etc
 
 def infer_launch(in_arr, max_sales, streak_len_threshold=12, delta_threshold = 0.2, 
                     _ma_interval=12, return_dict=False, _debug=False):
+
+    '''Infers a launch date, given a trajectory of spend, by identifying 
+        streaks of consistent growth and returning a dict describing the last streak.
+
+
+    PARAMETERS:
+
+        in_arr                  input array (numpy I think)
+        max_sales               the individual product's max sales value
+        streak_len_threshold    the number of periods of successive growth
+        delta_threshold         the change (proportionate to max sales) required for a streak to qualify
+        _ma_interval            interval for calculatino of moving averages
+        return_dict             [bool] return an object with info on all streaks, rather than the one detected
+
+
+    RETURN: 
+        dictionary with:
+            uptake_detected:    [bool] if a qualifying streak was found
+            start:              start of the detece
+            delta:              the increase over the uptake streak (proportion of max sales)
+            inferred_launch:    expressed relative to period zero of in_arr
+
+
+    '''
+
+
     
     # first get the moving ave. and ma_diffs
     ma = pf.mov_ave(in_arr, 12)
@@ -44,14 +70,14 @@ def infer_launch(in_arr, max_sales, streak_len_threshold=12, delta_threshold = 0
                 # only add to dict if is over threshold
                 if delta > delta_threshold:
                     if _debug: print('found streak above threshold, delta is:'.ljust(20), delta)
-                    s_key = "streak_"+str(len(streaks))
-                    streaks[s_key]={}
-                    streaks[s_key]['end_per'] = p
-                    streaks[s_key]['length'] = streak
-                    streaks[s_key]['end_val'] = ma[p]
-                    streaks[s_key]['start_val'] = ma[p-streak]          
-                    streaks[s_key]['raw_delta'] = ma[p] - ma[p-streak]
-                    streaks[s_key]['prop_delta'] = delta
+                    s_key = "s_"+str(len(streaks))
+                    streaks['streaks']={s_key:{}}
+                    streaks['streaks'][s_key]['end_per'] = p
+                    streaks['streaks'][s_key]['length'] = streak
+                    streaks['streaks'][s_key]['end_val'] = ma[p]
+                    streaks['streaks'][s_key]['start_val'] = ma[p-streak]          
+                    streaks['streaks'][s_key]['raw_delta'] = ma[p] - ma[p-streak]
+                    streaks['streaks'][s_key]['prop_delta'] = delta
                                
                     # only going to return the last qualifying streak (others available for `return_dict=True`)
                     streaks['uptake_detected'] = True
@@ -171,12 +197,7 @@ def trend(prod, interval, *, launch_cat=None, life_cycle_per=0,
     i_dict['__endint'] = "spacer"
 
 
-    # decide what this is
-    # ifperiod
-    
-    
-    # just generate projection if rate over a threshold
-    
+
     # first sort out all the periods
 
     out = np.array([i_dict['last_spend_ma']]) # this period overlaps with past
@@ -212,20 +233,7 @@ def trend(prod, interval, *, launch_cat=None, life_cycle_per=0,
 
 
 
-
-
-    # if i_dict['interval_rate_pct'] > threshold_rate:
-    #     if _debug: print('rate is OVER threshold')
-    #     out = i_dict['last_spend_ma'] + (i_dict['interval_rate'] * np.arange(1,n_pers+1))
-        
-    #     # apply plateau
-            
-    # else:
-    #     if _debug: print('rate is UNDER threshold')
-    #     out = i_dict['last_spend'] * np.ones(n_pers)
-    
-
-    
+   
     if _debug: 
         i_dict['__s5'] = "spacer"
         for i in i_dict:
@@ -349,6 +357,7 @@ def r_trend_old(df, n_pers, *, streak_len_thresh=12, delta_thresh = 0.2,
 
 
 ##_________________________________________________________________________##
+
 def r_profile(df, n_pers, 
               *, profile, gen_mult, _debug=True):
     '''Applies a profile, with a variable multiplier for patent expiry

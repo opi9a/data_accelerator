@@ -58,7 +58,7 @@ def plot_rset(scen_name, rset, npers=npers):
 
     axs[0].spines['top'].set_visible(False)
     axs[0].spines['right'].set_visible(False)
-    axs[0].plot(ind1, sum_data)
+    axs[0].plot(ind1[:-2], sum_data[:-2])
     axs[0].set_ylim(0)
     axs[0].set_ylabel('£m pa (annualised rate)')
 
@@ -451,9 +451,7 @@ def home():
         form.load_scenario.data = False
         form.load_scenario_name.data = ""
 
-
-
-    
+   
     pprint.pprint(form.data)
 
 
@@ -475,7 +473,7 @@ def test():
 
 @app.route('/scenarios/')
 def scenarios():
-    scen_list = [s for s in os.listdir('static/scenarios/') if s !='default']
+    scen_list = [s for s in os.listdir('static/scenarios/') if (s !='default' and s !='old_scens')]
     df = pd.DataFrame()
     proj_path = 'static/project'
 
@@ -495,13 +493,18 @@ def scenarios():
     df.to_csv(os.path.join(proj_path, 'project_data.csv'))
     df.to_pickle(os.path.join(proj_path, 'project_data.pkl'))
 
-    fig, ax = plt.subplots(figsize=(12,6))
-    ax.spines['top'].set_visible(False)
-    ax.spines['right'].set_visible(False)
-    for c in range(len(df.columns)):
-        ax.plot(df.index.to_timestamp(), df.iloc[:,c])
-    ax.set_ylim(0)
-    ax.set_ylabel('£bn pa (annualised)')
+    plot = df[:-2].plot(figsize=(12,6)) # cutting off last two periods as haven't found bug that means some forecasts drop at end
+    plot.spines['top'].set_visible(False)
+    plot.spines['right'].set_visible(False)
+    plot.set_ylabel('£bn pa (annualised)')
+
+    # fig, ax = plt.subplots(figsize=(12,6))
+    # ax.spines['top'].set_visible(False)
+    # ax.spines['right'].set_visible(False)
+    # for c in range(len(df.columns)):
+    #     ax.plot(df.index.to_timestamp(), df.iloc[:,c])
+    # ax.set_ylim(0)
+    # ax.set_ylabel('£bn pa (annualised)')
    
     ts = int((datetime.now() - datetime(1970,1,1)).total_seconds())
     
@@ -514,6 +517,7 @@ def scenarios():
             os.remove(os.path.join(proj_path, f))
 
     # plot it
+    fig = plot.get_figure()
     fig.savefig(outfig)
 
     # list for plotting
