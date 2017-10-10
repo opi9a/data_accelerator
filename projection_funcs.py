@@ -25,15 +25,14 @@ def plot_projs(rs_in, num_plots, out_path="", ma_interval=12):
     fut_df = rs_in.fut
     joined_df = rs_in.joined
     
-    # if there are relevant arguments to infer_launch(), get them
-    if 'streak_len_thresh' in rs_in.f_args: streak_len_thresh = rs_in.f_args['streak_len_thresh']
-    if 'delta_thresh' in rs_in.f_args: delta_thresh = rs_in.f_args['delta_thresh']
-    if 'uptake_dur' in rs_in.f_args: uptake_dur = rs_in.f_args['uptake_dur']
-    if 'plat_dur' in rs_in.f_args: plat_dur = rs_in.f_args['plat_dur']
-    if 'threshold_rate' in rs_in.f_args: threshold_rate = rs_in.f_args['threshold_rate']
-    # Note this last one has underscore in present function
-    if 'ma_interval' in rs_in.f_args: _ma_interval = rs_in.f_args['ma_interval']
-    
+    # if there are relevant arguments to infer_launch() and elsewhere, get them.  
+    # Note these have similar but not same names :/
+    il_args = {}
+    if 'ma_interval' in rs_in.f_args: il_args['_ma_interval'] = rs_in.f_args['ma_interval']
+    if 'streak_len_thresh' in rs_in.f_args: il_args['streak_len_threshold'] = rs_in.f_args['streak_len_thresh']
+    if 'delta_thresh' in rs_in.f_args: il_args['delta_threshold'] = rs_in.f_args['delta_thresh']
+    ma_interval = il_args['_ma_interval']
+  
     # make sure don't go beyond available products
     num_plots = min(num_plots, len(past_df))  
     
@@ -49,18 +48,20 @@ def plot_projs(rs_in, num_plots, out_path="", ma_interval=12):
     fig, axs = plt.subplots(num_plots, 1, figsize=(10,5*num_plots))
     ind = joined_df.columns.to_timestamp()
 
+    # this is useful for efficiently getting max_sales
+    index_df = pd.DataFrame([*past_df.index], columns = past_df.index.names).set_index(keys='PxMolecule')
+
     for i,p in enumerate(subset):
 
-        # can't believe it's this hard to get max_sales out of the index
-        max_sales = past_df.loc[p].index.get_level_values(past_df.index.names.index('max_sales')-1)[0]
-        uptake_out = rf.infer_launch(past_df.loc[p].values, max_sales, return_dict=True, _debug=False)
+        max_sales = index_df.loc[p,'max_sales']
+        uptake_out = rf.infer_launch(past_df.loc[p].values, max_sales, return_dict=True, _debug=False, **il_args)
 
         # basic plot of joined (i.e. past plus future)
         axs[i].plot(ind, joined_df.loc[p].T, label = 'actual and future spend')
         
         # moving average
         ma = mov_ave(past_df.loc[p], ma_interval)
-        axs[i].plot(ind, np.append(ma,[np.nan]*past_pad), label= 'moving average, interval: ' + str(_ma_interval))
+        axs[i].plot(ind, np.append(ma,[np.nan]*past_pad), label= 'moving average, interval: ' + str(ma_interval))
         
         # lagged moving average - useful for identifying patterns
         lagged_ma = ma - np.insert(ma, 0, np.zeros(ma_interval))[:-ma_interval]
@@ -112,7 +113,10 @@ def mov_ave(in_arr, window):
 ###_________________________________________________________________________###
 
 def variablise(string):
-    
+    '''Turns an input string into a variable, if it can.
+
+    Variables tried: bool, int, float, pd.Period
+    '''
     if string is None:
         print('variablising but None for string')
         return None
@@ -131,7 +135,7 @@ def variablise(string):
             except:
                 try:
                     return pd.Period(string)
-                except: return string
+                except: return string.strip()
 
 
  ###_________________________________________________________________________###
@@ -207,12 +211,12 @@ def get_ix_slice(df, in_dict):
     '''
     # first turn any None entries of the input into slices
     for i in in_dict:
-        # print(' in get slice, with key ', i, " value", in_dict[i])
+        print(' in get slice, with key ', i, " value", in_dict[i])
         if in_dict[i] is '' or in_dict[i] is None:
-            # print('setting element to noneslice')
+            print('setting element to noneslice')
             in_dict[i] = slice(None, None, None)
             
-        # else: print('it was not none')
+        else: print('it was not none')
     print('after processing the dict is ', in_dict)
 
     return tuple((in_dict.get(name, slice(None,None,None)))

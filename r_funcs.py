@@ -9,17 +9,25 @@ profs_table={'prof1':'c:/Users/groberta/Work/data_accelerator/profiles/prof1.csv
 
 ##_________________________________________________________________________##
 
-'''Suite of functions with common API which can be passed to a RuleSet object
+'''Suite of functions with common API which can be passed to a RuleSet object.
 
-TODO: document the API etc
+Actual functions for passing all prefixed `r_`.  Others (top of file) are auxiliary.
+
+TODO: fully document the API.  Basically need to be able to pass in a df with rows 
+for spend on products, and return a df with forecasts for each product (using original
+index, so can be appended / joined to input).
+
+Will be a bunch of other parameters, but these are automatically detected in the RuleSet object,
+and passed appropriately to front end.
+
 '''
 ##_________________________________________________________________________##
 
 def infer_launch(in_arr, max_sales, streak_len_threshold=12, delta_threshold = 0.2, 
                     _ma_interval=12, return_dict=False, _debug=False):
 
-    '''Infers a launch date, given a trajectory of spend, by identifying 
-        streaks of consistent growth and returning a dict describing the last streak.
+    '''Infers a launch date, given a trajectory of spend, by identifying an uptake phase - 
+        the most recent streak of consistent growth - and returning a dict describing it.
 
 
     PARAMETERS:
@@ -35,31 +43,32 @@ def infer_launch(in_arr, max_sales, streak_len_threshold=12, delta_threshold = 0
     RETURN: 
         dictionary with:
             uptake_detected:    [bool] if a qualifying streak was found
-            start:              start of the detece
+            start:              start of the detected qualifying streak
             delta:              the increase over the uptake streak (proportion of max sales)
             inferred_launch:    expressed relative to period zero of in_arr
 
 
     '''
 
-
     
     # first get the moving ave. and ma_diffs
-    ma = pf.mov_ave(in_arr, 12)
-    ma_diff = ma - np.insert(ma, 0, np.zeros(12))[:-12]
+    ma = pf.mov_ave(in_arr, _ma_interval)
+    ma_diff = ma - np.insert(ma, 0, np.zeros(_ma_interval))[:-_ma_interval]
           
     # now look for streaks
     streak = 0
-    streaks = {'uptake_detected':False}
-    for p in range(12, len(ma_diff)):   
-        if _debug: print(p, end=" ")
+    streaks = {'uptake_detected':False, 'streaks':{}}
+    for p in range(_ma_interval, len(ma_diff)):   
+        if _debug: print(p, end="")
         if ma_diff[p] > 0 and p < len(ma_diff)-1:
             streak += 1
+            if _debug: print("+", end="")
         else:
-            if _debug: print('streak ends, length:'.ljust(20), streak)
-            if _debug: print('length is: ', streak, end=" ")
+            if _debug: print('-', end="")
+            if streak>0 and _debug:
+                print('\nstreak ends, length is: ', streak, end=" ")
             if streak > streak_len_threshold:
-                if _debug: print(', over length threshold, ', end=" ")
+                if _debug: print(', OVER length threshold, ', end=" ")
 
                 # calculate the delta, based on the mov ave
                 if _debug: print(', START: ', p, ma[p], end=" ")
@@ -69,9 +78,9 @@ def infer_launch(in_arr, max_sales, streak_len_threshold=12, delta_threshold = 0
                 
                 # only add to dict if is over threshold
                 if delta > delta_threshold:
-                    if _debug: print('found streak above threshold, delta is:'.ljust(20), delta)
-                    s_key = "s_"+str(len(streaks))
-                    streaks['streaks']={s_key:{}}
+                    if _debug: print('streak is OVER delta threshold, delta is:'.ljust(20), delta)
+                    s_key = "s_"+str(p)
+                    streaks['streaks'][s_key]={}
                     streaks['streaks'][s_key]['end_per'] = p
                     streaks['streaks'][s_key]['length'] = streak
                     streaks['streaks'][s_key]['end_val'] = ma[p]
@@ -86,7 +95,7 @@ def infer_launch(in_arr, max_sales, streak_len_threshold=12, delta_threshold = 0
                     streaks['last_delta'] = delta 
                 
                 else:
-                    if _debug: print("delta of ", delta, " is below threshold of ", delta_threshold)
+                    if _debug: print("delta of ", delta, " is BELOW threshold of ", delta_threshold, "\n")
                     
             # terminate the streak even if it doesn't qualify
             streak = 0
@@ -94,7 +103,7 @@ def infer_launch(in_arr, max_sales, streak_len_threshold=12, delta_threshold = 0
     # infer start, using y=mx equation of straight line to get x1 - the offset of the first point from origin
     if streaks['uptake_detected']:
         streak_start = streaks['last_per'] - streaks['last_per_len']
-        window = min(streaks['last_per_len'], 12)
+        window = min(streaks['last_per_len'], _ma_interval)
         # set lower point at start of streak
         y1 = ma[streak_start]
         if _debug: print("y1 - low val - is", y1)
@@ -158,7 +167,7 @@ def trend(prod, interval, *, launch_cat=None, life_cycle_per=0,
     # get set of info
 
     i_dict = {}
-    i_dict['__s0'] = "spacer"
+    i_dict['__s0'] = "spacer" # just for printing the dict more nicely
 
     # first classify to phase
 
@@ -204,6 +213,7 @@ def trend(prod, interval, *, launch_cat=None, life_cycle_per=0,
 
     if i_dict['phase'] == 'terminal':
         # simplifies, plus avoids applying gen_mult if already in terminal
+        # different to 
         out = out[-1] * ((1 + term_rate_pa/12) ** np.arange(1, n_pers+1))
 
     else:
@@ -320,7 +330,9 @@ def r_trend_old(df, n_pers, *, streak_len_thresh=12, delta_thresh = 0.2,
 
         max_sales = row[0][df.index.names.index('max_sales')]
         inferred_launch_output = infer_launch(row[1:], max_sales=max_sales, delta_threshold = delta_thresh,
-                                                 _ma_interval=ma_interval)
+                                                 _ma_interval=ma_interval, _debug=_debug)
+
+        # print(inferred_launch_output)
 
         last_date = df.columns[-1]
 
@@ -340,7 +352,7 @@ def r_trend_old(df, n_pers, *, streak_len_thresh=12, delta_thresh = 0.2,
         else:
             print("for ", row[0][0], " NO inferred launch")           
             out_array = trend(row[1:], ma_interval, n_pers=n_pers, life_cycle_per=0,
-                uptake_dur=0, plat_dur=0, gen_mult=0, 
+                uptake_dur=0, plat_dur=0, gen_mult=gen_mult, 
                 name=row[0][0], term_rate_pa=term_rate_pa,  
                 _out_type='array', _debug=_debug)
 

@@ -91,7 +91,9 @@ class RuleSet:
         print("the slice is ", get_ix_slice(self.parent_df, self.index_slice))
 
         print('getting slice and assigning to past')
-        self.past = self.parent_df.loc[get_ix_slice(self.parent_df, self.index_slice),:]
+        slice= get_ix_slice(self.parent_df, self.index_slice)
+        print('slice is ', slice)
+        self.past = self.parent_df.loc[slice,:]
         
         print('calling function')
         self.fut = self.func(self.past, n_pers, **self.f_args)

@@ -17,7 +17,7 @@ import os
 
 app = Flask(__name__)
 bootstrap = Bootstrap(app)
-app.config['SECRET_KEY'] = 'vq98ervhq98743yh'
+app.config['SECRET_KEY'] = 'XXXXX-XXXXX-XXXXX-XXXXX'
 app.debug=True
 # toolbar = DebugToolbarExtension(app)
 
@@ -88,6 +88,68 @@ def plot_rset(scen_name, rset, npers=npers):
             os.remove(os.path.join(scen_dir, f))
     fig.savefig(fig_path)
     print("SAVING FIG AS:".ljust(pad1), fig_path) 
+
+
+def plot_all():
+        out_dfs = []
+        scen_dir = os.path.join('static/scenarios', scenario['name']) 
+        
+        # go through the rulesets and collect the summed projections
+        for r in scenario['rulesets']:
+            # first check the ruleset has been plotted
+            if scenario['rulesets'][r].out_fig == "":
+                print("\Trying to plot uncalculated rset:".ljust(pad1), scenario['rulesets'][r].name)
+                plot_rset(scenario['name'], scenario['rulesets'][r])
+            
+            outfigs[r] = scenario['rulesets'][r].out_fig
+            print("plotted - set outfigs dict entry to".ljust(pad1), outfigs[r])
+            
+            out_dfs.append(scenario['rulesets'][r].summed*phx_adj*12/1000000000)
+            print('length of out_dfs:'.ljust(pad1), len(out_dfs))
+
+        # make a df of the collected sums, save as csv/pkl and plot it
+        # try:
+        print('out_df list is: '.ljust(pad1), out_dfs)
+        df_concat = pd.concat(out_dfs, axis=1)
+        print('concatted, with shape '.ljust(pad1), len(df_concat))
+        df_concat.to_csv(os.path.join(scen_dir, 'dfconcat.csv'))
+        df_concat.to_pickle(os.path.join(scen_dir, 'dfconcat.pkl'))
+        
+        fig, ax = plt.subplots(figsize=(14,8))
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        print('made axes')
+        ax.stackplot(df_concat.index.to_timestamp(), 
+            [df_concat.reset_index(drop=True).iloc[:,c] for c in range(len(df_concat.columns))],
+            alpha=0.5)
+
+        ax.set_ylim(0)
+        ax.set_ylabel('£bn pa (annualised)')
+        ax.legend(df_concat.columns,  bbox_to_anchor=[0.2, 0.8])
+
+        
+        ts = int((datetime.now() - datetime(1970,1,1)).total_seconds())
+        
+        outfig = os.path.join(scen_dir, 'total_' + str(ts) + "_" + '.png')
+
+        print('looking for old plots to delete')
+        for f in os.listdir(scen_dir):
+            if f.startswith('total_') and f.endswith('.png'):
+                print("removing", os.path.join(scen_dir, f))
+                os.remove(os.path.join(scen_dir, f))
+
+        # plot it
+        fig.savefig(outfig)
+        outfigs['total'] = outfig
+        active_rset = 'total'
+        print("saving TOTAL fig as:".ljust(pad1), outfig)       
+
+        # now generate the scenario sum
+        df_concat.sum(axis=1).to_pickle(os.path.join(scen_dir, 'scen_sum.pkl'))
+
+
+        print('RULESET AFTER PLOTTING')
+        pprint.pprint(scenario['rulesets'])
 
 
 @app.route('/', methods=['GET', 'POST'])
@@ -213,8 +275,8 @@ def home():
             #       first need to variablise - do this first in the form, before updating the ruleset
             #       note that the form will reset to a string, as these are StringFields
             for p in form[r]['params'].data:
-                print("..in parameter".ljust(pad1), p)
-                print("..current contents:".ljust(pad1), form[r]['params'][p].data)
+                # print("..in parameter".ljust(pad1), p)
+                # print("..current contents:".ljust(pad1), form[r]['params'][p].data)
                 form[r]['params'][p].data = variablise(form[r]['params'][p].data)
 
             #    - now write to variablised param:args to the ruleset
@@ -296,68 +358,8 @@ def home():
 
     # plot all if flagged
     if form.plot_all.data==True: 
-        ('form.plot_all.data is TRUE')
-        out_dfs = []
-        scen_dir = os.path.join('static/scenarios', scenario['name']) 
-        
-        # go through the rulesets and collect the summed projections
-        for r in scenario['rulesets']:
-            # first check the ruleset has been plotted
-            if scenario['rulesets'][r].out_fig == "":
-                print("\Trying to plot uncalculated rset:".ljust(pad1), scenario['rulesets'][r].name)
-                plot_rset(scenario['name'], scenario['rulesets'][r])
-                outfigs[r] = scenario['rulesets'][r].out_fig
-                print("plotted - set outfigs dict entry to".ljust(pad1), outfigs[r])
-            
-            out_dfs.append(scenario['rulesets'][r].summed*phx_adj*12/1000000000)
-            print('length of out_dfs:'.ljust(pad1), len(out_dfs))
-
-        # make a df of the collected sums, save as csv/pkl and plot it
-        # try:
-        print('out_df list is: '.ljust(pad1), out_dfs)
-        df_concat = pd.concat(out_dfs, axis=1)
-        print('concatted, with shape '.ljust(pad1), len(df_concat))
-        df_concat.to_csv(os.path.join(scen_dir, 'dfconcat.csv'))
-        df_concat.to_pickle(os.path.join(scen_dir, 'dfconcat.pkl'))
-        
-        fig, ax = plt.subplots(figsize=(14,8))
-        ax.spines['top'].set_visible(False)
-        ax.spines['right'].set_visible(False)
-        print('made axes')
-        ax.stackplot(df_concat.index.to_timestamp(), 
-            [df_concat.reset_index(drop=True).iloc[:,c] for c in range(len(df_concat.columns))],
-            alpha=0.5)
-
-        ax.set_ylim(0)
-        ax.set_ylabel('£bn pa (annualised)')
-        ax.legend(df_concat.columns,  bbox_to_anchor=[0.2, 0.8])
-
-        
-        ts = int((datetime.now() - datetime(1970,1,1)).total_seconds())
-        
-        outfig = os.path.join(scen_dir, 'total_' + str(ts) + "_" + '.png')
-
-        print('looking for old plots to delete')
-        for f in os.listdir(scen_dir):
-            if f.startswith('total_') and f.endswith('.png'):
-                print("removing", os.path.join(scen_dir, f))
-                os.remove(os.path.join(scen_dir, f))
-
-        # plot it
-        fig.savefig(outfig)
-        outfigs['total'] = outfig
-        active_rset = 'total'
-        print("saving TOTAL fig as:".ljust(pad1), outfig)       
-
-        # now generate the scenario sum
-        df_concat.sum(axis=1).to_pickle(os.path.join(scen_dir, 'scen_sum.pkl'))
-
-
-        # except:
-        #     print("couldn't make a total plot / figure")
-
-        print('RULESET AFTER PLOTTING')
-        pprint.pprint(scenario['rulesets'])
+        plot_all()
+        active_rset = 'Total'
 
     print("checking if SAVE SCENARIO")
     if form.save_scenario.data and form.save_scenario_name.data:
@@ -388,6 +390,7 @@ def home():
         
         scenario['name'] = form.load_scenario_name.data
         print("scenario after load:", scenario)
+        plot_all()
         form.load_scenario.data = False
         form.load_scenario_name.data = ""
         form = make_form1(scenario['rulesets'])
@@ -410,13 +413,13 @@ def home():
         form[f]['rname'].data = scenario['rulesets'][f].name
 
         for i in scenario['rulesets'][f].string_slice:
-            print("..in parameter".ljust(pad1), i)
-            print("..current contents:".ljust(pad1), form[f]['string_slice'][i].data)
+            # print("..in parameter".ljust(pad1), i)
+            # print("..current contents:".ljust(pad1), form[f]['string_slice'][i].data)
             form[f]['string_slice'][i].data = scenario['rulesets'][f].string_slice[i]
 
         for p in scenario['rulesets'][f].f_args:
-            print("..in parameter".ljust(pad1), p)
-            print("..current contents:".ljust(pad1), form[f]['params'][p].data)
+            # print("..in parameter".ljust(pad1), p)
+            # print("..current contents:".ljust(pad1), form[f]['params'][p].data)
             form[f]['params'][p].data = scenario['rulesets'][f].f_args[p]
         print('looking up ruleset func in func_table', 
             [k for k in func_table if func_table[k]==scenario['rulesets'][f].func][0])
@@ -436,8 +439,8 @@ def home():
             form[r]['rname'].data = scenario['rulesets'][r].name
             
             for i in scenario['rulesets'][r].string_slice:
-                print("..in parameter".ljust(pad1), i)
-                print("..current contents:".ljust(pad1), form[r]['string_slice'][i].data)
+                # print("..in parameter".ljust(pad1), i)
+                # print("..current contents:".ljust(pad1), form[r]['string_slice'][i].data)
                 form[r]['string_slice'][i].data = scenario['rulesets'][r].string_slice[i]
 
             for p in scenario['rulesets'][r].f_args:
