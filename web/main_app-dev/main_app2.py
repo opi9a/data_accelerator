@@ -92,6 +92,7 @@ def plot_rset(scen_name, rset, npers=npers):
 
 def plot_all():
         out_dfs = []
+        print( "PLOTTING ALL, SCEN NAME IS ", scenario['name'])
         scen_dir = os.path.join('static/scenarios', scenario['name']) 
         
         # go through the rulesets and collect the summed projections
@@ -109,7 +110,7 @@ def plot_all():
 
         # make a df of the collected sums, save as csv/pkl and plot it
         # try:
-        print('out_df list is: '.ljust(pad1), out_dfs)
+        # print('out_df list is: '.ljust(pad1), out_dfs)
         df_concat = pd.concat(out_dfs, axis=1)
         print('concatted, with shape '.ljust(pad1), len(df_concat))
         df_concat.to_csv(os.path.join(scen_dir, 'dfconcat.csv'))
@@ -359,7 +360,7 @@ def home():
     # plot all if flagged
     if form.plot_all.data==True: 
         plot_all()
-        active_rset = 'Total'
+        active_rset = 'total'
 
     print("checking if SAVE SCENARIO")
     if form.save_scenario.data and form.save_scenario_name.data:
@@ -464,6 +465,7 @@ def home():
         form[r]['rname'].data = r
     
     print("Outfigs dict:".ljust(pad1), outfigs)
+    print("RULESETS PASSED: ", [n for n in scenario['rulesets']])
 
     session['last_active_rset'] = active_rset
 
