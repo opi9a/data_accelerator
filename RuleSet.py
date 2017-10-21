@@ -24,7 +24,6 @@ class RuleSet:
 
         self.func = func
         self.func_str = func_str
-        print("initialising f args to", f_args)
         self.f_args = f_args
         self.past = None
         self.fut = None
@@ -54,7 +53,6 @@ class RuleSet:
 
     def set_args(self, a_args):
         '''Set the f_args dictionary - passed to self.func()'''
-        print('[RuleSet class] calling set_args')
         if self.func==None:
             print("no function yet")
             return
@@ -81,24 +79,14 @@ class RuleSet:
     
 
     def xtrap(self, n_pers):
-        print("calling xtrap")
         if self.func == None:
             print("no function assigned")
             return
-        print("about to pass ", self.index_slice)
-        print("of type ", type(self.index_slice))
-        print("and the args are ", self.f_args)
-        print("the slice is ", get_ix_slice(self.parent_df, self.index_slice))
-
-        print('getting slice and assigning to past')
         slice= get_ix_slice(self.parent_df, self.index_slice)
-        print('slice is ', slice)
         self.past = self.parent_df.loc[slice,:]
         
-        print('calling function')
         self.fut = self.func(self.past, n_pers, **self.f_args)
 
-        print('function returned')
         if self.join_output:
             try:
                 self.joined = self.past.join(self.fut)
@@ -108,9 +96,6 @@ class RuleSet:
                                                 columns=[self.name])
 
          
-
-        # except: print("looks like don't have arguments or something")
-
         
     def __repr__(self):
         outlist = []

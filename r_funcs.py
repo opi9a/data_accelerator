@@ -24,7 +24,7 @@ and passed appropriately to front end.
 ##_________________________________________________________________________##
 
 def infer_launch(in_arr, max_sales, streak_len_threshold=12, delta_threshold = 0.2, 
-                    _ma_interval=12, return_dict=False, _debug=False):
+                    _ma_interval=12, verbose_return=False, _debug=False):
 
     '''Infers a launch date, given a trajectory of spend, by identifying an uptake phase - 
         the most recent streak of consistent growth - and returning a dict describing it.
@@ -37,7 +37,7 @@ def infer_launch(in_arr, max_sales, streak_len_threshold=12, delta_threshold = 0
         streak_len_threshold    the number of periods of successive growth
         delta_threshold         the change (proportionate to max sales) required for a streak to qualify
         _ma_interval            interval for calculatino of moving averages
-        return_dict             [bool] return an object with info on all streaks, rather than the one detected
+        verbose_return          [bool] return an object with info on all streaks, rather than the one detected
 
 
     RETURN: 
@@ -88,7 +88,7 @@ def infer_launch(in_arr, max_sales, streak_len_threshold=12, delta_threshold = 0
                     streaks['streaks'][s_key]['raw_delta'] = ma[p] - ma[p-streak]
                     streaks['streaks'][s_key]['prop_delta'] = delta
                                
-                    # only going to return the last qualifying streak (others available for `return_dict=True`)
+                    # only going to return the last qualifying streak (others available for `verbose_return=True`)
                     streaks['uptake_detected'] = True
                     streaks['last_per'] = p
                     streaks['last_per_len'] = streak
@@ -117,7 +117,7 @@ def infer_launch(in_arr, max_sales, streak_len_threshold=12, delta_threshold = 0
         inferred_launch = streak_start -int(x1) - (_ma_interval//2)
         if _debug: print('inferred_launch is ', inferred_launch)
         
-    if return_dict:
+    if verbose_return:
         return(streaks)
     
     elif streaks['uptake_detected']:
@@ -148,7 +148,8 @@ def trend(prod, interval, *, launch_cat=None, life_cycle_per=0,
 
     if name is not None:
         if _debug: print('\n\nIn ',  name)
-    else: print('\nNo name')
+    else: 
+        if _debug: print('\nNo name')
     
     # make sure initial array is ok
     try:
@@ -257,7 +258,7 @@ def trend(prod, interval, *, launch_cat=None, life_cycle_per=0,
         return i_dict
 
     elif _out_type == 'df':
-        print('df output')
+        if _debug: print('df output')
         spacer = np.empty(len(prod))
         spacer[:] = np.nan
         out=np.insert(out, 0, spacer)
@@ -284,27 +285,13 @@ def r_trend(df, n_pers, *, uptake_dur=None, plat_dur=None, gen_mult=None, term_r
         launch_date = pd.Period(launch_date, freq='M')
         last_date = df.columns[-1]
         life_cycle_per = last_date - launch_date
-        print(launch_date, last_date, life_cycle_per)
 
         out_array = trend(row[1:], _interval, n_pers=n_pers, life_cycle_per=life_cycle_per,
                         uptake_dur=uptake_dur, plat_dur=plat_dur, gen_mult=gen_mult, 
                         name=row[0][0], term_rate_pa=term_rate_pa,  
                         _out_type='array', _debug=_debug)
 
-        print(out_array[-10:])
         out.append(out_array)
-        # call trend on row[1:]
-        # append to out
-
- 
-    # if _debug:
-    #     pad1 = 20
-    #     print("launch_date".ljust(pad1), launch_date, 
-    #           "\nlast_date".ljust(pad1), last_date, 
-    #           "\nn_pers".ljust(pad1), n_pers, 
-    #           "\nlast_spend".ljust(pad1), last_spend, 
-    #           "\nstart_x".ljust(pad1), start_x, 
-    #           "\nscaling_f".ljust(pad1), scaling_f)
 
     # Build the df index and columns
 
@@ -341,7 +328,7 @@ def r_trend_old(df, n_pers, *, streak_len_thresh=12, delta_thresh = 0.2,
             launch_date = pd.Period(df.columns[0], freq='M') +  inferred_launch_output['inferred_launch']
             life_cycle_per = last_date - launch_date
 
-            print("for ", row[0][0], " inferred launch is ", launch_date, ", life_cycle_per is ", life_cycle_per)
+            if _debug: print("for ", row[0][0], " inferred launch is ", launch_date, ", life_cycle_per is ", life_cycle_per)
 
             out_array = trend(row[1:], ma_interval, n_pers=n_pers, life_cycle_per=life_cycle_per,
                             uptake_dur=uptake_dur, plat_dur=plat_dur, gen_mult=gen_mult, 
@@ -356,7 +343,7 @@ def r_trend_old(df, n_pers, *, streak_len_thresh=12, delta_thresh = 0.2,
                 name=row[0][0], term_rate_pa=term_rate_pa,  
                 _out_type='array', _debug=_debug)
 
-        print(out_array[-10:])
+        if _debug: print(out_array[-10:])
         out.append(out_array)
         # call trend on row[1:]
         # append to out

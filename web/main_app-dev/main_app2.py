@@ -142,6 +142,11 @@ def plot_all():
         # plot it
         fig.savefig(outfig)
         outfigs['total'] = outfig
+
+        print("going to save outfigs as ", scen_dir + '/outfigs.pkl')
+        with open(scen_dir + '/outfigs.pkl', 'wb') as f:
+            pickle.dump(outfigs, f, protocol=pickle.HIGHEST_PROTOCOL)        
+
         active_rset = 'total'
         print("saving TOTAL fig as:".ljust(pad1), outfig)       
 
@@ -374,8 +379,24 @@ def home():
         print('going to save scenario:'.ljust(pad1), form.save_scenario_name.data)
         with open(scen_save_path, 'wb') as f:
             pickle.dump(scenario, f, protocol=pickle.HIGHEST_PROTOCOL)
+
+        # may as well save all the rulesets too
+        # need to put this into a function
+        if not os.path.exists(scen_dir+'/xls'):
+            os.makedirs(scen_dir+'/xls')
+        for r in scenario['rulesets']:
+            out_root = os.path.join(scen_dir+'/xls', r)
+            print('saving xls in scenario: ', out_root)
+            writer = pd.ExcelWriter(out_root + ".xlsx")
+            scenario['rulesets'][r].past.to_excel(writer, 'past')
+            scenario['rulesets'][r].fut.to_excel(writer, 'fut')
+            scenario['rulesets'][r].joined.to_excel(writer, 'joined')
+            scenario['rulesets'][r].summed.to_excel(writer, 'summed')
+            writer.save()
+
         form.save_scenario.data = False
         form.save_scenario_name.data = None
+
 
     print("checking if LOAD SCENARIO")
     if form.load_scenario.data and form.load_scenario_name.data:
@@ -395,6 +416,12 @@ def home():
         form.load_scenario.data = False
         form.load_scenario_name.data = ""
         form = make_form1(scenario['rulesets'])
+        outfigs_temp = pd.read_pickle(os.path.join('static/scenarios', form.load_scenario_name.data, 'outfigs.pkl'))
+
+        for k in outfigs_temp:
+            outfigs[k] = outfigs_temp[k]
+        print("outfigs dict loaded as, ", outfigs)
+
 
 
     # 5. Call `make_form()` again, to make a new form based on the new ruleset dict structure
@@ -478,27 +505,29 @@ def test():
 
 @app.route('/scenarios/')
 def scenarios():
-    scen_list = [s for s in os.listdir('static/scenarios/') if (s !='default' and s !='old_scens')]
-    df = pd.DataFrame()
+    scen_list = [s for s in os.listdir('static/scenarios/') if (s !='default' and s[0] !='_')]
     proj_path = 'static/project'
 
     print('list of scenarios:', scen_list)
+    dflist = []
     for p in scen_list:
         scen_sum_path = os.path.join('static/scenarios', p, 'scen_sum.pkl')
         print("opening ", scen_sum_path)
         try:
             scen_in = pd.read_pickle(scen_sum_path)
+            if scen_in.name is None: scen_in.name = p
             print('found a sum with lenght: ', len(scen_in))
-            df[p]=scen_in
+            dflist.append(scen_in)
             print('sums appended now: ', len(scen_sums))
         except:
             print('could not open ', p, ' for concatting')
 
+    df = pd.concat(dflist, axis=1)
   
     df.to_csv(os.path.join(proj_path, 'project_data.csv'))
     df.to_pickle(os.path.join(proj_path, 'project_data.pkl'))
 
-    plot = df[:-2].plot(figsize=(12,6)) # cutting off last two periods as haven't found bug that means some forecasts drop at end
+    plot = df[:-20].plot(figsize=(12,6)) # cutting off last two periods as haven't found bug that means some forecasts drop at end
     plot.spines['top'].set_visible(False)
     plot.spines['right'].set_visible(False)
     plot.set_ylabel('£bn pa (annualised)')

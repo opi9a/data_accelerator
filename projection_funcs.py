@@ -31,7 +31,7 @@ def plot_projs(rs_in, num_plots, out_path="", ma_interval=12):
     if 'ma_interval' in rs_in.f_args: il_args['_ma_interval'] = rs_in.f_args['ma_interval']
     if 'streak_len_thresh' in rs_in.f_args: il_args['streak_len_threshold'] = rs_in.f_args['streak_len_thresh']
     if 'delta_thresh' in rs_in.f_args: il_args['delta_threshold'] = rs_in.f_args['delta_thresh']
-    ma_interval = il_args['_ma_interval']
+    ma_interval = il_args.get('_ma_interval', ma_interval)
   
     # make sure don't go beyond available products
     num_plots = min(num_plots, len(past_df))  
@@ -80,8 +80,10 @@ def plot_projs(rs_in, num_plots, out_path="", ma_interval=12):
         axs[i].spines['bottom'].set_position('zero')
         axs[i].set_title(p)
         if (i%5 == 0): axs[i].legend()
-        
-    fig.savefig(os.path.join(out_path,rs_in.name + '_plots.png'))
+    if not os.path.exists(out_path+'/plots'):
+        os.makedirs(out_path+'/plots')    
+    fig.savefig(os.path.join(out_path +'/plots/' + rs_in.name + '_plots.png'))
+
 
 
 ###_________________________________________________________________________###
@@ -211,13 +213,9 @@ def get_ix_slice(df, in_dict):
     '''
     # first turn any None entries of the input into slices
     for i in in_dict:
-        print(' in get slice, with key ', i, " value", in_dict[i])
         if in_dict[i] is '' or in_dict[i] is None:
-            print('setting element to noneslice')
             in_dict[i] = slice(None, None, None)
             
-        else: print('it was not none')
-    print('after processing the dict is ', in_dict)
 
     return tuple((in_dict.get(name, slice(None,None,None)))
                      for name in df.index.names)
