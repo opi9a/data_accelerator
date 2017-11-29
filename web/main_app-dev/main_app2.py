@@ -22,7 +22,7 @@ app.debug=True
 # toolbar = DebugToolbarExtension(app)
 
 # df = pd.read_pickle('c:/Users/groberta/Work/data_accelerator/spend_data_proc/dfs/main_unstacked_17AUG.pkl') # old df
-df = pd.read_pickle('c:/Users/groberta/Work/data_accelerator/spend_data_proc/dfs/main_df_new_dates_13SEP2017a.pkl')
+df = pd.read_pickle('c:/Users/groberta/Work/data_accelerator/spend_data_proc/dfs/main_df_new_dates_13SEP2017a_pd20.pkl')
 cutoff = pd.Period('3-2014', freq='M')
 npers = 120
 
