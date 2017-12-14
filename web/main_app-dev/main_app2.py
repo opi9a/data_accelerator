@@ -40,7 +40,7 @@ func_table={'r_profile':r_funcs.r_profile,
         'r_tprofile':r_funcs.r_tprofile, 
         'r_terminal':r_funcs.r_terminal, 
         'r_trend':r_funcs.r_trend, 
-        'r_fut':r_funcs.r_fut, 
+        'r_fut':r_funcs.r_fut,
         'r_fut_tr':r_funcs.r_fut_tr,
         'r_trend_old': r_funcs.r_trend_old}
         # NB currently need to hard code these options in make_form1(), to get in the SelectField
@@ -317,15 +317,13 @@ def home():
             # dump to xls if required
             print("checking if DUMPING to excel")
             if form[r].dump_rset_to_xls.data:
-                out_root = os.path.join('static/scenarios', scenario['name'], scenario['rulesets'][r].name) 
-                writer = pd.ExcelWriter(out_root + ".xlsx")
+                xls_outpath = os.path.join('static/scenarios', scenario['name'], 'xls', scenario['rulesets'][r].name + ".xlsx") 
+                writer = pd.ExcelWriter(xls_outpath)
                 scenario['rulesets'][r].past.to_excel(writer, 'past')
                 scenario['rulesets'][r].fut.to_excel(writer, 'fut')
                 scenario['rulesets'][r].joined.to_excel(writer, 'joined')
                 scenario['rulesets'][r].summed.to_excel(writer, 'summed')
                 writer.save()
-                with open("".join([out_root, ".pkl"]), 'wb') as f:
-                    pickle.dump(scenario['rulesets'][r], f, protocol=pickle.HIGHEST_PROTOCOL)                
                 form[r].dump_rset_to_xls.data == False
                 active_rset = scenario['rulesets'][r].name
 
@@ -379,20 +377,6 @@ def home():
         print('going to save scenario:'.ljust(pad1), form.save_scenario_name.data)
         with open(scen_save_path, 'wb') as f:
             pickle.dump(scenario, f, protocol=pickle.HIGHEST_PROTOCOL)
-
-        # may as well save all the rulesets too
-        # need to put this into a function
-        if not os.path.exists(scen_dir+'/xls'):
-            os.makedirs(scen_dir+'/xls')
-        for r in scenario['rulesets']:
-            out_root = os.path.join(scen_dir+'/xls', r)
-            print('saving xls in scenario: ', out_root)
-            writer = pd.ExcelWriter(out_root + ".xlsx")
-            scenario['rulesets'][r].past.to_excel(writer, 'past')
-            scenario['rulesets'][r].fut.to_excel(writer, 'fut')
-            scenario['rulesets'][r].joined.to_excel(writer, 'joined')
-            scenario['rulesets'][r].summed.to_excel(writer, 'summed')
-            writer.save()
 
         form.save_scenario.data = False
         form.save_scenario_name.data = None

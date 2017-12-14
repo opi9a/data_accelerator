@@ -199,7 +199,7 @@ def slicify(in_string):
 def get_ix_slice(df, in_dict):
     '''make a pd.IndexSlice
     args:   - a dataframe (with named index)
-            - index names:value pairs to be sliced (in any order)
+            - dict of index names:value pairs to be sliced (in any order)
             
     returns a pd.IndexSlice with the desired spec
             
@@ -210,6 +210,12 @@ def get_ix_slice(df, in_dict):
        'year = [2008, 2012]' will select just those two years
        
     simply print the returned output to see what's going on
+
+    Can pass output directly to iloc.  Eg
+
+        ixs = pf.get_ix_slice(df_main, dict(is_biol=False, launch_year=[2015,2016]))
+        df_main.loc[ixs,:]
+
     '''
     # first turn any None entries of the input into slices
     for i in in_dict:
