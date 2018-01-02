@@ -8,7 +8,61 @@ import inspect
 
 
 class RuleSet:
-    def __init__(self, parent_df, name, string_slice=None, index_slice=None,
+    '''Creates an instance of a RuleSet - which allows the application of a 
+    projection rule to a defined set of products.
+
+
+    INPUT PARAMETERS
+
+    parent_df       : the DataFrame containing spend on existing products.
+                    : [the only argument required on instantiation]
+
+    string_slice, index_slice
+                    : define the subset of the parental DataFrame
+                    : string_slice is in a format compatible with the web app, and
+                    is translated to index_slice, which is actually used to slice the df,
+                    by the slicify_string method
+
+    func_str, func  : define the projection function to be applied
+                    : func_str is just the string for the function,
+                    : func is the object itself
+
+    join_output     : this is used as a hack to get around the problem that projections for future launches
+                    are based on a series of past spend (i.e. one line), which creates problems when sticking 
+                    together with future spend.  NEEDS FIXING, although it currently does work.
+
+
+
+    KEY METHODS
+
+    set_slice()      : sets index_slice, using a dictionary of parameter-argument pairs,
+                    where parameters correspond with index levels / labels in the parent df, 
+                    and arguments are the slicing rules
+
+                    eg dict(is_BIOL=True) will create a slice of all biologicals (assuming they're identified)
+
+
+    set_args()      : sets the arguments passed to the projection function
+
+    xtrap()         : executes the projection calculation, and creates outputs
+
+
+
+    OUTPUTS
+
+    A set of pandas DataFrames or Series:
+
+        past        : df with past spend on products in the slice
+
+        fut         : df with future, projected spend on products in the slice
+
+        joined      : df with past and future
+
+        summed      : series with the sum of spend across all products
+
+    '''
+
+    def __init__(self, parent_df, name='generic', string_slice=None, index_slice=None,
                 func_str="", func=None, f_args={}, join_output=True):
         self.name = name
         self.parent_df = parent_df
@@ -79,11 +133,13 @@ class RuleSet:
     
 
     def xtrap(self, n_pers):
+
+        slice= get_ix_slice(self.parent_df, self.index_slice)
+        self.past = self.parent_df.loc[slice,:]
+
         if self.func == None:
             print("no function assigned")
             return
-        slice= get_ix_slice(self.parent_df, self.index_slice)
-        self.past = self.parent_df.loc[slice,:]
         
         self.fut = self.func(self.past, n_pers, **self.f_args)
 
