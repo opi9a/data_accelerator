@@ -353,8 +353,8 @@ def spender(spend_per, profile, launch_pers, coh_growth, term_growth, _debug=Fal
 ###_________________________________________________________________________###
 
         
-def get_forecast(profile, l_start, l_stop, coh_growth, term_growth, 
-                 proj_start=None, proj_stop=None, scale=1, name='s_pd', 
+def get_forecast(profile, l_start, l_stop, coh_growth, term_growth, scale=1, 
+                 proj_start=None, proj_stop=None, name='s_pd', 
                  output=None, _debug=False):
     ''' Arguments: 
            - a spend profile
