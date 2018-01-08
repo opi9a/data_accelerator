@@ -71,8 +71,8 @@ def infer_launch(in_arr, max_sales, streak_len_threshold=12, delta_threshold = 0
                 if _debug: print(', OVER length threshold, ', end=" ")
 
                 # calculate the delta, based on the mov ave
-                if _debug: print(', START: ', p, ma[p], end=" ")
-                if _debug: print(', END: ', p-streak, ma[p-streak], end=" ")
+                if _debug: print(', START: ', p-streak, ma[p-streak], end=" ")
+                if _debug: print(', END: ', p, ma[p], end=" ")
                 delta = (ma[p] - ma[p-streak]) / max_sales
                 if _debug: print(', delta is, ', delta, end=" ")
                 
