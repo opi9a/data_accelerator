@@ -6,7 +6,57 @@ import matplotlib.ticker as ticker
 import projection_funcs as pf
 
 
+def impute_peak_sales(df_slice, cutoff, shed, coh_growth_pa, term_growth_pa, ave_interval=3, 
+                        _debug=False):
+    '''For an input df slice (NB not by launch date), and lifecycle shape, 
+    returns the impled peak sales associated with the lifecycle shape.
+    
+    Returns peak sales per period for one period's worth of launches.
+    
+    So if period is month, multiply *12*12 for peak sales pa of a year of launches.
+    
+    ave_interval is the interval over which terminal sales in the observed set is calculated
+    '''
+        
+    # make sure cutoff is a period (will take a string here)
+    cutoff = pd.Period(cutoff, freq='M')
+    
+    # work out how many periods since cutoff
+    n_pers = df_slice.columns[-1] - cutoff
+    if _debug: print('npers', n_pers)
+    
+    # get last real observations - only need sales in last period really
+    ixs = pf.get_ix_slice(df_slice, dict(start_month=slice(cutoff,None,None)))
+    summed = df_slice.loc[ixs,:].sum()
+    
+    if _debug: print('summed df tail\n', summed.tail())
+
+    end_sales = summed[-ave_interval:].mean()
+    if _debug: print('end_sales', end_sales)
+
+    # make unscaled simulated cumulation
+    shape = make_profile_shape(1, shed)
+    if _debug: print("shape\n", shape)
+
+    sim = pf.get_forecast(shape, l_start=0, l_stop=n_pers, 
+                          coh_growth=coh_growth_pa/12, term_growth=term_growth_pa/12)
+
+    if _debug: print('sim tail\n', sim.tail())
+
+    end_sim = sim[-ave_interval:].mean()
+
+    if _debug: print('end_sim tail', end_sim)
+
+    return end_sales / end_sim
+
+##_________________________________________________________________________##
+
 def plot_impact(policy, start_m, n_pers):
+    '''Plots a grid of charts.
+
+    Going to change this to use individual plotting functions 
+    for each chart commonly needed, so can then choose whatever grid layout
+    '''
     
     shapes = make_shapes(policy)
     projs = project_policy(policy, start_m, n_pers)
@@ -22,7 +72,7 @@ def plot_impact(policy, start_m, n_pers):
     fig = plt.figure(figsize=(15,9))
     rcParams['axes.titlepad'] = 12
 
-    ax1 = plt.subplot2grid((2,3), (0, 1))
+    ax1 = plt.subplot2grid((2,2), (0, 0))
     for s in shapes:
         ax1.plot(np.arange(len(shapes[s]))/12, shapes[s]*12) # mult 12 to give annualised 
     ax1.set_title("Lifecycles")
@@ -30,7 +80,7 @@ def plot_impact(policy, start_m, n_pers):
     ax1.set_ylabel('£m, annualised')
     ax1.legend(shapes.columns)
     
-    ax2 = plt.subplot2grid((2,3), (0, 2))
+    ax2 = plt.subplot2grid((2,2), (0, 1))
     for p in projs:
         ax2.plot(ind, projs[p].values*12) # mult 12 to give annualised 
     for t in ax2.get_xticklabels():
@@ -44,7 +94,7 @@ def plot_impact(policy, start_m, n_pers):
 
     counterfactual = projs.columns[0]
 
-    ax3 = plt.subplot2grid((2,3), (1, 0), colspan=2)
+    ax3 = plt.subplot2grid((2,2), (1, 0), colspan=2)
     num_rects = len(annual_diffs.columns)
     rect_width = 0.8
     gap = 0.3
@@ -60,7 +110,7 @@ def plot_impact(policy, start_m, n_pers):
     ax3.set_yticklabels(['{:,}'.format(int(x)) for x in ax3.get_yticks().tolist()])
     ax3.legend(annual_diffs.columns)
 
-    fig.text(0.13,0.8,'here is text')
+    # fig.text(0.13,0.8,'here is text')
 
     fig.subplots_adjust(hspace=0.4, wspace=0.3)
 
@@ -107,7 +157,10 @@ def project_policy(policy, start_m, n_pers):
 
 
 def make_shapes(policy):
-    '''Input is a list of Scenario instances
+    '''Helper function to generate arrays for plotting to visualise the shapes
+    (rather than for further calculations)
+
+    Input is a list of Scenario instances
     Returns the corresponding shapes, after aligning across launch delays
     '''
     min_delay = 0
@@ -118,21 +171,22 @@ def make_shapes(policy):
     for s in policy:
         spacer = s.launch_delay - min_delay
         out.append(pd.Series(np.concatenate([np.zeros(spacer),
-            pf.make_profile_shape(s.peak_sales_pm, s.shed['uptake_dur'], 
-                    s.shed['plat_dur'], s.shed['gen_mult'])]), name=s.name))
+            make_profile_shape(s.peak_sales_pm, s.shed)]), name=s.name))
     return pd.DataFrame(out).T
 
 ##_________________________________________________________________________##
 
 
-def make_profile_shape(peak_sales_pa, uptake_dur, plat_dur, gen_mult, _debug=False):
+def make_profile_shape(peak_sales_pa, shed, _debug=False):
     '''Makes a profile from input description of lifecycle shape.
 
     Basically builds the linear shed.
+
+    Input is a dictionary with fields:  'uptake_dur', 'plat_dur', 'gen_mult' as normal
     '''
-    prof = np.array([float(uptake_dur)] * (uptake_dur+plat_dur+1))
-    prof[:uptake_dur-1] = np.arange(1,uptake_dur)
-    prof[-1] = (uptake_dur * gen_mult)
+    prof = np.array([float(shed['uptake_dur'])] * (shed['uptake_dur']+shed['plat_dur']+1))
+    prof[:shed['uptake_dur']-1] = np.arange(1,shed['uptake_dur'])
+    prof[-1] = (shed['uptake_dur'] * shed['gen_mult'])
 
     return prof * peak_sales_pa / max(prof)
 
@@ -211,7 +265,7 @@ class Scenario():
         pad2 = 20
         return "\n".join([
             "Scenario name:".ljust(pad1) + self.name.rjust(pad2),
-            "peak sales pa:".ljust(pad1) + str(self.peak_sales_pa).rjust(pad2),
+            "peak sales pa:".ljust(pad1) + str(self.peak_sales_pm*12).rjust(pad2),
             "shed:".ljust(pad1),
             "  - shed name:".ljust(pad1) + self.shed['shed_name'].rjust(pad2),
             "  - uptake_dur:".ljust(pad1) + str(self.shed['uptake_dur']).rjust(pad2),
@@ -227,5 +281,4 @@ class Scenario():
         return self.__str__()
 
     def get_shape(self):
-        return pf.make_profile_shape(self.peak_sales_pm, 
-                self.shed['uptake_dur'], self.shed['plat_dur'], self.shed['gen_mult'])
+        return make_profile_shape(self.peak_sales_pm, self.shed)
