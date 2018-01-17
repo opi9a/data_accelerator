@@ -4,18 +4,28 @@ from matplotlib import pyplot as plt
 from matplotlib import rcParams
 import matplotlib.ticker as ticker
 import projection_funcs as pf
+from collections import namedtuple
 
 
 def impute_peak_sales(df_slice, cutoff, shed, coh_growth_pa, term_growth_pa, ave_interval=3, 
                         _debug=False):
     '''For an input df slice (NB not by launch date), and lifecycle shape, 
-    returns the impled peak sales associated with the lifecycle shape.
+    returns the impled peak sales associated with the lifecycle shape
+    (i.e. for an individual product or cohort).
     
-    Returns peak sales per period for one period's worth of launches.
-    
+    Returns peak sales per period for one period's worth of launches.  
     So if period is month, multiply *12*12 for peak sales pa of a year of launches.
     
     ave_interval is the interval over which terminal sales in the observed set is calculated
+
+    Works by comparing a synthetic cumulation based on the lifecycle shape with actual sales, 
+    initial ('stub') sales since a cutoff date.
+
+    First make the synthetic cumulation, scaled to peak sales = 1.
+    Then align the initial period with the start date of the stub.
+    Then get the actual sales at the end of the observed stub 'end_sales'.
+    Compare this to the sales at the corresponding period of the synthetic cumulation
+    The ratio of these is the implied lifecycle peak sales.
     '''
         
     # make sure cutoff is a period (will take a string here)
@@ -32,7 +42,7 @@ def impute_peak_sales(df_slice, cutoff, shed, coh_growth_pa, term_growth_pa, ave
     if _debug: print('summed df tail\n', summed.tail())
 
     end_sales = summed[-ave_interval:].mean()
-    if _debug: print('end_sales', end_sales)
+    if _debug: print('end_sales {:0,.0f}'.format(end_sales))
 
     # make unscaled simulated cumulation
     shape = make_profile_shape(1, shed)
@@ -41,7 +51,7 @@ def impute_peak_sales(df_slice, cutoff, shed, coh_growth_pa, term_growth_pa, ave
     sim = pf.get_forecast(shape, l_start=0, l_stop=n_pers, 
                           coh_growth=coh_growth_pa/12, term_growth=term_growth_pa/12)
 
-    if _debug: print('sim tail\n', sim.tail())
+    if _debug: print('tail of cumulation\n', sim.tail())
 
     end_sim = sim[-ave_interval:].mean()
 
@@ -51,68 +61,148 @@ def impute_peak_sales(df_slice, cutoff, shed, coh_growth_pa, term_growth_pa, ave
 
 ##_________________________________________________________________________##
 
-def plot_impact(policy, start_m, n_pers):
+
+def plot_shapes_line(policy, fig=None, ax=None, figsize=None):
+    '''Makes a simple line graph of the lifecycle shapes corresponding to the scenarios in a policy
+    '''
+    shapes = make_shapes(policy)
+    if fig is None and ax is None:
+        fig, ax = plt.subplots(figsize=figsize)
+    
+    for s in shapes:
+        ax.plot(np.arange(len(shapes[s]))/12, shapes[s]*12)
+        ax.set_title("Lifecycles")
+        ax.set_xlabel('years post launch')
+        ax.set_ylabel('£m, annualised')
+        ax.legend(shapes.columns)
+
+    return(fig)
+
+##_________________________________________________________________________##
+
+
+def plot_cumspend_line(policy, start_m, n_pers, 
+                        projs=None,  
+                        fig=None, ax=None, figsize=None):
+    '''Plots a  line graph of the cumulated spend corresponding to the scenarios in a policy
+
+    Can either generate a new plot, or add to existing axis (in which case pass ax)
+
+    Can either generate projections and index from the policy, or use existing if passed
+    '''
+
+    # get projections from policy if not passed
+    if projs==None: 
+        projs = project_policy(policy, start_m, n_pers)
+
+    ind = projs.index.to_timestamp()
+
+    # create fig and ax, unless passed (which they will be if plotting in existing grid)
+    if fig is None and ax is None:
+        fig, ax = plt.subplots(figsize=figsize)
+    
+    for p in projs:
+        ax.plot(ind, projs[p].values*12) # mult 12 to give annualised 
+
+    for t in ax.get_xticklabels():
+        t.set_rotation(45)
+
+    ax.legend(['1', '2'])
+    ax.set_yticklabels(['{:,}'.format(int(x)) for x in ax.get_yticks().tolist()])
+    ax.set_title("Cumulated spend")
+    ax.legend(projs.columns)  
+
+
+
+##_________________________________________________________________________##
+
+
+def plot_diffs_ann_bar(policy, start_m, n_pers, 
+                        projs=None, diffs=None,
+                        fig=None, ax=None, figsize=None):
+    '''Makes a bar chart graph of the lifecycle shapes corresponding to the scenarios in a policy
+    Can either generate a new plot, or add to existing axis (in which case pass ax)
+    '''
+
+    # get projections and diffs from policy if not passed
+    if projs is None: 
+        projs = project_policy(policy, start_m, n_pers)
+
+    if diffs is None:
+        diffs = projs.iloc[:,1:].subtract(projs.iloc[:,0], axis=0)    
+
+
+    ind = projs.index.to_timestamp()
+
+    annual_projs = projs.groupby(projs.index.year).sum()
+    annual_diffs = diffs.groupby(diffs.index.year).sum()
+
+    # set the name of the counterfactual
+    counterfactual_name = projs.columns[0]
+
+    # create fig and ax, unless passed (which they will be if plotting in existing grid)
+    if fig is None and ax is None:
+        fig, ax = plt.subplots(figsize=figsize)
+
+    num_rects = len(annual_diffs.columns)
+    rect_width = 0.5
+    gap = 0.45
+    for i, x in enumerate(annual_diffs):
+        rect = ax.bar(annual_diffs.index + ((i/num_rects)*(1-gap)), annual_diffs[x], 
+                        width=rect_width/num_rects) 
+    ax.set_title("Difference in annual spend vs " + counterfactual_name +", £m")
+    ax.tick_params(axis='x', bottom='off')
+    ax.grid(False, axis='x')
+    # for t in ax.get_xticklabels():
+    #     t.set_rotation(45)
+    ax.xaxis.set_major_locator(ticker.MultipleLocator(1))
+    ax.set_yticklabels(['{:,}'.format(int(x)) for x in ax.get_yticks().tolist()])
+    ax.legend(annual_diffs.columns)
+    if len(annual_diffs.columns)>2:  ax.legend(annual_diffs.columns)
+
+
+##_________________________________________________________________________##
+
+
+def plot_impact_grid3(policy, start_m, n_pers, save_path=None, plot_diffs=True):
     '''Plots a grid of charts.
 
     Going to change this to use individual plotting functions 
     for each chart commonly needed, so can then choose whatever grid layout
     '''
     
-    shapes = make_shapes(policy)
     projs = project_policy(policy, start_m, n_pers)
     ind = projs.index.to_timestamp()
     diffs = projs.iloc[:,1:].subtract(projs.iloc[:,0], axis=0)    
 
 # plot all shapes and cumulated projections
-# for diffs, calc vs first column
+# for diffs, calc vs first columnb
     
     annual_projs = projs.groupby(projs.index.year).sum()
     annual_diffs = diffs.groupby(diffs.index.year).sum()
     
-    fig = plt.figure(figsize=(15,9))
+    tab_rows = 2
+    if not plot_diffs: tab_rows = 1
+
+    fig = plt.figure(figsize=(15,tab_rows*5))
     rcParams['axes.titlepad'] = 12
 
-    ax1 = plt.subplot2grid((2,2), (0, 0))
-    for s in shapes:
-        ax1.plot(np.arange(len(shapes[s]))/12, shapes[s]*12) # mult 12 to give annualised 
-    ax1.set_title("Lifecycles")
-    ax1.set_xlabel('years post launch')
-    ax1.set_ylabel('£m, annualised')
-    ax1.legend(shapes.columns)
-    
-    ax2 = plt.subplot2grid((2,2), (0, 1))
-    for p in projs:
-        ax2.plot(ind, projs[p].values*12) # mult 12 to give annualised 
-    for t in ax2.get_xticklabels():
-        t.set_rotation(45)
-    ax2.legend(['1', '2'])
-    # ax2.set_ylabel('£bn, annualised')
-    ax2.set_yticklabels(['{:,}'.format(int(x)) for x in ax2.get_yticks().tolist()])
-    ax2.set_title("Cumulated spend")
-    ax2.legend(projs.columns)
+    ax1 = plt.subplot2grid((tab_rows,2), (0, 0))
+    plot_shapes_line(policy, ax=ax1)
 
+    ax2 = plt.subplot2grid((tab_rows,2), (0, 1))
+    plot_cumspend_line(policy, start_m=start_m, n_pers=n_pers, ax=ax2)
 
-    counterfactual = projs.columns[0]
-
-    ax3 = plt.subplot2grid((2,2), (1, 0), colspan=2)
-    num_rects = len(annual_diffs.columns)
-    rect_width = 0.8
-    gap = 0.3
-    for i, x in enumerate(annual_diffs):
-        rect = ax3.bar(annual_diffs.index + ((i/num_rects)*(1-gap)), annual_diffs[x], 
-                        width=rect_width/num_rects) 
-    ax3.set_title("Difference in annual spend vs " + counterfactual +", £m")
-    ax3.tick_params(axis='x', bottom='off')
-    ax3.grid(False, axis='x')
-    for t in ax3.get_xticklabels():
-        t.set_rotation(45)
-    ax3.xaxis.set_major_locator(ticker.MultipleLocator(1))
-    ax3.set_yticklabels(['{:,}'.format(int(x)) for x in ax3.get_yticks().tolist()])
-    ax3.legend(annual_diffs.columns)
+    if plot_diffs:
+        ax3 = plt.subplot2grid((tab_rows,2), (1, 0), colspan=2)
+        plot_diffs_ann_bar(policy, start_m=start_m, n_pers=n_pers, ax=ax3, projs=projs, diffs=diffs)
 
     # fig.text(0.13,0.8,'here is text')
 
     fig.subplots_adjust(hspace=0.4, wspace=0.3)
+
+    if save_path is not None:
+        fig.savefig(save_path)
 
 ##_________________________________________________________________________##
 
@@ -178,15 +268,13 @@ def make_shapes(policy):
 
 
 def make_profile_shape(peak_sales_pa, shed, _debug=False):
-    '''Makes a profile from input description of lifecycle shape.
-
-    Basically builds the linear shed.
-
-    Input is a dictionary with fields:  'uptake_dur', 'plat_dur', 'gen_mult' as normal
+    '''Returns a profile (np.array) from input description of lifecycle shape
+    (shed namedtuple with fields 'shed_name', 'uptake_dur', 'plat_dur', 'gen_mult',
+    and peak sales.
     '''
-    prof = np.array([float(shed['uptake_dur'])] * (shed['uptake_dur']+shed['plat_dur']+1))
-    prof[:shed['uptake_dur']-1] = np.arange(1,shed['uptake_dur'])
-    prof[-1] = (shed['uptake_dur'] * shed['gen_mult'])
+    prof = np.array([float(shed.uptake_dur)] * (shed.uptake_dur+shed.plat_dur+1))
+    prof[:shed.uptake_dur-1] = np.arange(1,shed.uptake_dur)
+    prof[-1] = (shed.uptake_dur * shed.gen_mult)
 
     return prof * peak_sales_pa / max(prof)
 
@@ -225,6 +313,20 @@ def make_profile_pts(in_points, _debug=False):
 ##_________________________________________________________________________##
 
 
+class shed(namedtuple('shed', 'shed_name uptake_dur plat_dur gen_mult')):
+    '''The parameters to define a linear 'shed'-like lifecycle profile, 
+    in a named tuple.
+    
+    .shed_name  : the name of the shed shape
+    .uptake_dur : the number of periods of linear growth following launch
+    .plat_dur   : the number of periods of constant spend following uptake
+    .gen_mult   : the change on patent expiry (multiplier)
+    '''
+    pass
+
+
+##_________________________________________________________________________##
+
 
 class Scenario():
     '''Stores information required to define a policy scenario.  I
@@ -233,7 +335,8 @@ class Scenario():
 
     name            : the name of the scenario 
 
-    shed            : dict describing the lifecycle profile
+    shed            : namedtuple describing the lifecycle profile
+     .shed_name      : the name of the shed profile
      .uptake_dur     : duration of (linear) uptake period
      .plat_dur       : duration of (flat) plateau
      .gen_mult       : impact of patent expiry (multiplier, eg 0.2)
@@ -248,13 +351,7 @@ class Scenario():
     '''
     def __init__(self, name, shed, terminal_gr, launch_delay, cohort_gr, peak_sales_pa):
         self.name = name
-        
-        self.shed = dict()
-        self.shed['shed_name'] = shed.get('name', 'no name')
-        self.shed['uptake_dur'] = shed.get('uptake_dur', None)
-        self.shed['plat_dur'] = shed.get('plat_dur', None)
-        self.shed['gen_mult'] = shed.get('gen_mult', None)
-        
+        self.shed = shed
         self.terminal_gr = terminal_gr
         self.cohort_gr = cohort_gr
         self.peak_sales_pm = peak_sales_pa / 12
@@ -264,13 +361,13 @@ class Scenario():
         pad1 = 20
         pad2 = 20
         return "\n".join([
-            "Scenario name:".ljust(pad1) + self.name.rjust(pad2),
+            "Scenario name:".ljust(pad1) + str(self.name).rjust(pad2),
             "peak sales pa:".ljust(pad1) + str(self.peak_sales_pm*12).rjust(pad2),
             "shed:".ljust(pad1),
-            "  - shed name:".ljust(pad1) + self.shed['shed_name'].rjust(pad2),
-            "  - uptake_dur:".ljust(pad1) + str(self.shed['uptake_dur']).rjust(pad2),
-            "  - plat_dur:".ljust(pad1) + str(self.shed['plat_dur']).rjust(pad2),
-            "  - gen_mult:".ljust(pad1) + str(self.shed['gen_mult']).rjust(pad2),
+            "  - shed name:".ljust(pad1) + self.shed.shed_name.rjust(pad2),
+            "  - uptake_dur:".ljust(pad1) + str(self.shed.uptake_dur).rjust(pad2),
+            "  - plat_dur:".ljust(pad1) + str(self.shed.plat_dur).rjust(pad2),
+            "  - gen_mult:".ljust(pad1) + str(self.shed.gen_mult).rjust(pad2),
             "terminal_gr:".ljust(pad1) + str(self.terminal_gr).rjust(pad2),
             "launch_delay:".ljust(pad1) + str(self.launch_delay).rjust(pad2),
             "cohort_gr:".ljust(pad1) + str(self.cohort_gr).rjust(pad2),
@@ -282,3 +379,4 @@ class Scenario():
 
     def get_shape(self):
         return make_profile_shape(self.peak_sales_pm, self.shed)
+
