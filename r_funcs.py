@@ -284,6 +284,9 @@ def r_trend(df, n_pers, *, uptake_dur=None, plat_dur=None, gen_mult=None, term_r
         launch_date = row[0][df.index.names.index('start_month')] # gets the index number of 'start_date' in the df.index list
         launch_date = pd.Period(launch_date, freq='M')
         last_date = df.columns[-1]
+        # HERE GET LOE DATE IF KNOWN
+        # USE IT TO CALC LIFECYCLE PERIOD
+        # ONLY USE LAUNCH DATE IF LOE DATE NOT KNOWN
         life_cycle_per = last_date - launch_date
 
         out_array = trend(row[1:], _interval, n_pers=n_pers, life_cycle_per=life_cycle_per,
@@ -530,6 +533,11 @@ def r_fut(df, n_pers, *, profile, cutoff_date,
 def r_fut_tr(df, n_pers, *, cutoff_date, uptake_dur, plat_dur, gen_mult, 
              coh_growth_pa, term_growth_pa, name='future', _debug=False):
     
+    '''Generates a projection of spend on future launches, based on cumulation
+    of a lifecycle profile (itself imputed from observations), and scaled using observations.
+    '''
+
+
     coh_growth = coh_growth_pa /12
     term_growth = term_growth_pa /12
 
