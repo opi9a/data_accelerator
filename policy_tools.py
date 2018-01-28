@@ -124,6 +124,12 @@ def plot_cumspend_line(start_m, n_pers,
 ##_________________________________________________________________________##
 
 
+def plot_diffs(df, ann=False)
+
+
+##_________________________________________________________________________##
+
+
 def plot_diffs_ann_bar(start_m, n_pers, 
                         policy=None, projs=None, diffs=None,
                         fig=None, ax=None, figsize=None, return_fig=False, save_path=None):
@@ -260,17 +266,34 @@ def project_policy(policy, start_m, n_pers, diffs_out=False, annual=False):
     
     '''
     min_delay = 0
-    for s in policy:
-        if s.launch_delay < min_delay: min_delay = s.launch_delay
-   
     out = []
-    for s in policy:
-        spacer = s.launch_delay - min_delay
-        spaced_shape = np.concatenate([np.zeros(spacer), s.get_shape()])
-        out.append(pd.Series(pf.get_forecast(spaced_shape, 
-                                             coh_growth=s.cohort_gr/12, term_growth=s.terminal_gr/12, 
-                                             l_start=0, l_stop=n_pers, 
-                                             name=s.name)))
+
+    if isinstance(policy, list):
+        for s in policy:
+            if s.launch_delay < min_delay: min_delay = s.launch_delay
+       
+        for s in policy:
+            spacer = s.launch_delay - min_delay
+            spaced_shape = np.concatenate([np.zeros(spacer), s.get_shape()])
+            out.append(pd.Series(pf.get_forecast(spaced_shape, coh_growth=s.cohort_gr/12, 
+                                                term_growth=s.terminal_gr/12, 
+                                                l_start=0, l_stop=n_pers, 
+                                                name=s.name)))
+
+    if isinstance(policy, dict):
+        for s in policy:
+            if policy[s].launch_delay < min_delay: min_delay = policy[s].launch_delay
+       
+        for s in policy:
+            spacer = policy[s].launch_delay - min_delay
+            spaced_shape = np.concatenate([np.zeros(spacer), policy[s].get_shape()])
+            out.append(pd.Series(pf.get_forecast(spaced_shape, 
+                                                 coh_growth=policy[s].cohort_gr/12, 
+                                                 term_growth=policy[s].terminal_gr/12, 
+                                                 l_start=0, l_stop=n_pers, 
+                                                 name=s)))
+
+
     ind = pd.PeriodIndex(start=start_m, freq='M', periods=n_pers)
     df = pd.DataFrame(out).T
     df.index = ind
@@ -296,25 +319,48 @@ def make_shapes(policy):
     '''
     min_delay = 0
     max_delay = 0
-    for s in policy:
-        if s.launch_delay < min_delay: min_delay = s.launch_delay
-        if s.launch_delay > max_delay: max_delay = s.launch_delay
 
     out = []
-    
-    for s in policy:        
-        # assemble the elements
-        spacer = s.launch_delay - min_delay
-        main_phase = make_profile_shape(s.peak_sales_pm, s.shed)
 
-        # calculate any additional terminal growth period, so all scenarios line up
-        tail = 12 + max_delay - s.launch_delay
-        terminus = main_phase[-1] * ((1+s.terminal_gr)** np.arange(1,tail))
+    if isinstance(policy, list):
+        for s in policy:
+            if s.launch_delay < min_delay: min_delay = s.launch_delay
+            if s.launch_delay > max_delay: max_delay = s.launch_delay
+
         
-        ser = pd.Series(np.concatenate([np.zeros(spacer), main_phase, terminus]), name=s.name)
-        # put together in a pd.Series
-        out.append(ser)
+        for s in policy:        
+            # assemble the elements
+            spacer = s.launch_delay - min_delay
+            main_phase = make_profile_shape(s.peak_sales_pm, s.shed)
+
+            # calculate any additional terminal growth period, so all scenarios line up
+            tail = 12 + max_delay - s.launch_delay
+            terminus = main_phase[-1] * ((1+s.terminal_gr)** np.arange(1,tail))
+            
+            ser = pd.Series(np.concatenate([np.zeros(spacer), main_phase, terminus]), name=s.name)
+            # put together in a pd.Series
+            out.append(ser)
     
+    if isinstance(policy, dict):
+        for s in policy:
+            if policy[s].launch_delay < min_delay: min_delay = policy[s].launch_delay
+            if policy[s].launch_delay > max_delay: max_delay = policy[s].launch_delay
+
+        
+        for s in policy:        
+            # assemble the elements
+            spacer = policy[s].launch_delay - min_delay
+            main_phase = make_profile_shape(policy[s].peak_sales_pm, policy[s].shed)
+
+            # calculate any additional terminal growth period, so all scenarios line up
+            tail = 12 + max_delay - policy[s].launch_delay
+            terminus = main_phase[-1] * ((1+policy[s].terminal_gr)** np.arange(1,tail))
+            
+            ser = pd.Series(np.concatenate([np.zeros(spacer), main_phase, terminus]), name=s)
+            # put together in a pd.Series
+            out.append(ser)
+    
+
     return pd.DataFrame(out).T
 
 ##_________________________________________________________________________##
