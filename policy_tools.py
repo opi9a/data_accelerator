@@ -33,7 +33,72 @@ def cost_ratio(sav_rate, k1=None, k2=None, ratio=None):
     return ((1-r)*(ratio)) + r
 
 
-##_________________________________________________________________________##b
+##_________________________________________________________________________##
+
+
+
+def dump_to_xls(res_df, outfile, shape_scens=None):
+    '''Dump a results DataFrame to an xls, with option to make shapes from a list 
+    or dict of scenarios
+    '''
+    writer = pd.ExcelWriter(outfile)
+  
+    if shape_scens is not None:
+
+        # find if it's one or two layers (have to do for list and dict different)
+        if isinstance(shape_scens, dict):
+            layer1 = shape_scens[list(shape_scens.keys())[0]]
+
+        elif isinstance(shape_scens, list):
+            layer1 = shape_scens[0]
+
+        if not type(layer1) in [list, dict]:
+            shape_scens = [shape_scens]
+
+        params_table = make_params_table(shape_scens)
+        summary_table = params_table.append(res_df.groupby(res_df.index.year).sum())
+        summary_table.to_excel(writer, 'summary')
+        dump_shapes(shape_scens).to_excel(writer, 'shapes')
+    
+    res_df.to_excel(writer, 'main_res')
+
+    # if more than one column, do a stack
+    if len(res_df.columns)>1:
+    # excel writer doesn't like pd.Periods it seems
+        new_ind = res_df.index.to_timestamp()
+        stacked = res_df.copy().set_index(new_ind)
+        
+        #need to check how many levels to work out how many times to unstack
+        col_depth = len(res_df.columns.names)
+
+        for d in range(col_depth):
+            stacked = stacked.stack()
+
+        stacked.rename('spend')
+        new_names = ['Date', 'SpendLine', 'Scenario']
+        stacked.index.names = new_names[:col_depth+1]
+        stacked.to_excel(writer, 'stacked')
+    
+    writer.save()
+
+
+##_________________________________________________________________________##
+
+def dump_shapes(scens):
+    '''for dictionary of scenarios, dumps a single df with all the shapes 
+     - constructed from the Sheds etc, by make_shapes()
+    '''
+    
+    all_shapes = pd.DataFrame()
+    for s in scens:
+        for l in scens[s]:
+            all_shapes[s,l] = make_shapes([scens[s][l]])
+    all_shapes.columns = pd.MultiIndex.from_tuples(all_shapes.columns)
+    all_shapes.columns.names = ['scenario', 'spendline']
+    all_shapes.index.name = 'period'
+    return all_shapes
+
+##_________________________________________________________________________##
 
 
 def impute_peak_sales(df_slice, cutoff, shed, coh_growth_pa, term_growth_pa, ave_interval=3, 
@@ -98,20 +163,49 @@ def make_params_table(pol_dict, index=None):
 
     df = pd.DataFrame(index=index)
 
-    for p in pol_dict:
-        for q in pol_dict[p]:
-            name = (p, q)
-            params = [pol_dict[p][q].peak_sales_pm*12*12, # double annualised
-                     pol_dict[p][q].sav_rate,
-                     int(pol_dict[p][q].shed.uptake_dur),
-                     int(pol_dict[p][q].shed.plat_dur),
-                     pol_dict[p][q].shed.gen_mult,
-                     pol_dict[p][q].terminal_gr,
-                     pol_dict[p][q].cohort_gr]
-            df[name]=params
+    # make an internal func, so this works with 1 or 2 layer dicts
+    def _get_stuff(low_dict, parent=None):
+        # sub_df=pd.DataFrame(index=index)
+        for q in low_dict:
+            params = [low_dict[q].peak_sales_pm*12*12, # double annualised
+                     low_dict[q].sav_rate,
+                     int(low_dict[q].shed.uptake_dur),
+                     int(low_dict[q].shed.plat_dur),
+                     low_dict[q].shed.gen_mult,
+                     low_dict[q].terminal_gr,
+                     low_dict[q].cohort_gr]
 
-    df.columns = pd.MultiIndex.from_tuples(df.columns)
+            # if doing this in a 2 layer dict, need to get a tuple column name
+            if parent is None:
+                col_name = q
+            else: 
+                col_name = (parent, q)
+            df[col_name] = params
 
+
+    # case if 1 layer dict(i.e. a single scenario)
+
+    # find if it's one or two layers (have to do for list and dict different)
+    if isinstance(pol_dict, dict):
+        layer1 = pol_dict[list(pol_dict.keys())[0]]
+
+    elif isinstance(pol_dict, list):
+        layer1 = pol_dict[0]
+
+    if not type(layer1) in [list, dict]:
+        _get_stuff(pol_dict)
+
+    else:
+        for p in pol_dict:
+            if isinstance(pol_dict, dict):
+                _get_stuff(pol_dict[p], p)
+
+            elif isinstance(pol_dict, list):
+                _get_stuff(p)
+
+    try:
+        df.columns = pd.MultiIndex.from_tuples(df.columns)
+    except: pass
     return df
 
 #_________________________________________________________________________##
@@ -201,8 +295,8 @@ def make_shapes(policy):
 
 
 
-def plot_ann_diffs(projs, max_yrs=5, fig=None, ax=None, figsize=None, legend=None, net_spend=False,
-                        return_fig=False, save_path=None):
+def plot_ann_diffs(projs, max_yrs=5, fig=None, ax=None, figsize=None, 
+                    table=False, legend=None, net_spend=False, return_fig=False, save_path=None):
     '''Plots a bar chart of annual data, subtracting the first column
     Can either generate a new plot, or add to existing axis (in which case pass ax)
     '''
@@ -247,6 +341,25 @@ def plot_ann_diffs(projs, max_yrs=5, fig=None, ax=None, figsize=None, legend=Non
     else:
         ax.legend(diffs.columns)
         if len(diffs.columns)>2:  ax.legend(diffs.columns)
+
+    if table:
+        ax.set_xticks([])
+        print(type(diffs))
+        print(diffs.head())
+
+        rows = []
+        for x in diffs:
+            rows.append(["{:0.2f}".format(y) for y in diffs[x]])
+
+        row_labs = None
+        if legend: row_labs = legend
+        else: row_labs = diffs.columns
+
+        c_labels = list(diffs.index)
+        tab = ax.table(cellText=rows, colLabels=c_labels, rowLabels= row_labs)
+        tab.set_fontsize(12)
+        tab.scale(1,2)
+        tab.auto_set_font_size
 
     if save_path is not None:
         fig.savefig(save_path)
@@ -310,7 +423,7 @@ def plot_cumspend_line(start_m=None, n_pers=None,
 
 def plot_diffs_ann_bar(start_m, n_pers, max_yrs=5,
                         policy=None, projs=None, diffs=None, net_spend=False,
-                        fig=None, ax=None, figsize=None, legend=None,
+                        fig=None, ax=None, figsize=None, legend=None, table=False,
                         return_fig=False, save_path=None):
     '''Makes a bar chart graph of the lifecycle shapes corresponding to the spendlines in a policy
     Can either generate a new plot, or add to existing axis (in which case pass ax)
@@ -364,6 +477,22 @@ def plot_diffs_ann_bar(start_m, n_pers, max_yrs=5,
     ax.legend(annual_diffs.columns)
     if len(annual_diffs.columns)>2:  ax.legend(annual_diffs.columns)
 
+
+    if table:
+        ax.set_xticks([])
+        print(type(annual_diffs))
+        print(annual_diffs.head())
+
+        rows = []
+        for x in annual_diffs:
+            rows.append(["{:0.2f}".format(y) for y in annual_diffs[x]])
+
+        c_labels = list(annual_diffs.index)
+        print(rows)
+        tab = ax.table(cellText=rows, colLabels=c_labels, rowLabels= ['    £m  '])
+        tab.set_fontsize(12)
+        tab.scale(1,2)
+
     if save_path is not None:
         fig.savefig(save_path)
 
@@ -408,19 +537,20 @@ def plot_impact_grid3(policy, start_m, n_pers, projs=None, diffs=None, max_bar_y
 
     if plot_bar:
         ax2 = plt.subplot2grid((tab_rows,2), (1, 0), colspan=2)
-        plot_diffs_ann_bar(start_m=start_m, n_pers=n_pers, ax=ax2, projs=projs, diffs=diffs, max_yrs=max_bar_yrs, net_spend=net_spend)
+        plot_diffs_ann_bar(start_m=start_m, n_pers=n_pers, ax=ax2, projs=projs, diffs=diffs, 
+                    table=True, max_yrs=max_bar_yrs, net_spend=net_spend)
 
-    if table:
-        tab = plt.subplot2grid((tab_rows,2), (2, 0), colspan=2)
-        tab.set_frame_on(False)
-        tab.set_xticks([])
-        tab.set_yticks([])
+    # if table:
+    #     tab = plt.subplot2grid((tab_rows,2), (2, 0), colspan=2)
+    #     tab.set_frame_on(False)
+    #     tab.set_xticks([])
+    #     tab.set_yticks([])
 
-        rowvals = ["{:0,.0f}".format(x) for x in annual_diffs.iloc[:,0].values]
-        the_table = tab.table(cellText=[rowvals], rowLabels=['spend, £m'],
-                            loc='top')
-        the_table.auto_set_font_size(False)
-        the_table.set_fontsize(10)
+    #     rowvals = ["{:0,.0f}".format(x) for x in annual_diffs.iloc[:,0].values]
+    #     the_table = tab.table(cellText=[rowvals], rowLabels=['spend, £m'],
+    #                         loc='top')
+    #     the_table.auto_set_font_size(False)
+    #     the_table.set_fontsize(10)
 
     # fig.text(0.13,0.8,'here is text')
 
