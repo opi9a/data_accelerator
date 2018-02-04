@@ -335,6 +335,7 @@ def make_shapes(policy):
 
     for s in policy:
         # make it work with a dict or a list
+
         if isinstance(policy, dict): s = policy[s]
         if s.launch_delay < min_delay: min_delay = s.launch_delay
         if s.launch_delay > max_delay: max_delay = s.launch_delay
@@ -342,6 +343,9 @@ def make_shapes(policy):
     
     for s in policy:
         # make it work with a dict or a list
+        name = None
+        if isinstance(policy, dict): name = s
+        elif isinstance(policy, list): name = s.name
         if isinstance(policy, dict): s = policy[s]        
         
         # assemble the elements
@@ -352,12 +356,18 @@ def make_shapes(policy):
         tail = 12 + max_delay - s.launch_delay
         terminus = main_phase[-1] * ((1+s.terminal_gr)** np.arange(1,tail))
         
-        ser = pd.Series(np.concatenate([np.zeros(spacer), main_phase, terminus]), name=s.name)
+
+        ser = pd.Series(np.concatenate([np.zeros(spacer), main_phase, terminus]), name=name)
         # put together in a pd.Series
         out.append(ser)
     
 
-    return pd.DataFrame(out).T
+    out_df = pd.DataFrame(out)
+    try:
+        out_df.index = pd.MultiIndex.from_tuples(out_df.index)
+    except: pass
+    
+    return out_df.T
 
 ##_________________________________________________________________________##
 
