@@ -37,28 +37,43 @@ def cost_ratio(sav_rate, k1=None, k2=None, ratio=None):
 
 
 
-def dump_to_xls(res_df, outfile, shape_scens=None):
+def dump_to_xls(res_df, outfile, policy=None, scenario=None):
     '''Dump a results DataFrame to an xls, with option to make shapes from a list 
-    or dict of scenarios
+    or dict of scenarios (policy), or from a scenario alone
     '''
     writer = pd.ExcelWriter(outfile)
   
-    if shape_scens is not None:
+    if policy is not None:
 
         # find if it's one or two layers (have to do for list and dict different)
-        if isinstance(shape_scens, dict):
-            layer1 = shape_scens[list(shape_scens.keys())[0]]
+        if isinstance(policy, dict):
+            layer1 = policy[list(policy.keys())[0]]
 
-        elif isinstance(shape_scens, list):
-            layer1 = shape_scens[0]
+        elif isinstance(policy, list):
+            layer1 = policy[0]
 
         if not type(layer1) in [list, dict]:
-            shape_scens = [shape_scens]
+            policy = [policy]
 
-        params_table = make_params_table(shape_scens)
-        summary_table = params_table.append(res_df.groupby(res_df.index.year).sum())
-        summary_table.to_excel(writer, 'summary')
-        dump_shapes(shape_scens).to_excel(writer, 'shapes')
+        params_table = make_params_table(policy)
+        summary_table=None
+        try:
+            summary_table = params_table.append(res_df.groupby(res_df.index.year).sum())
+            summary_table.to_excel(writer, 'summary')
+        except:
+            params_table.to_excel(writer, 'params')
+        dump_shapes(policy).to_excel(writer, 'shapes')
+
+    if scenario is not None:
+        params_table = make_params_table(scenario)
+        summary_table=None
+        try:
+            summary_table = params_table.append(res_df.groupby(res_df.index.year).sum())
+            summary_table.to_excel(writer, 'summary')
+        except:
+            params_table.to_excel(writer, 'params')
+        make_shapes(scenario).to_excel(writer, 'shapes')        
+
     
     res_df.to_excel(writer, 'main_res')
 
@@ -87,6 +102,8 @@ def dump_to_xls(res_df, outfile, shape_scens=None):
 def dump_shapes(scens):
     '''for dictionary of scenarios, dumps a single df with all the shapes 
      - constructed from the Sheds etc, by make_shapes()
+
+     TODO make this cope with dicts or list, with whatever depth
     '''
     
     all_shapes = pd.DataFrame()
@@ -98,7 +115,58 @@ def dump_shapes(scens):
     all_shapes.index.name = 'period'
     return all_shapes
 
+
 ##_________________________________________________________________________##
+
+
+def first_elem(in_struct):
+    '''Returns the type first element of the input, be it a list or a dict
+    '''
+
+    if isinstance(in_struct, list): 
+        return in_struct[0]
+    
+    elif isinstance(in_struct, dict):
+        return in_struct[list(in_struct.keys())[0]]
+
+
+##_________________________________________________________________________##
+
+
+def flatten(struct, _debug=False):
+    '''Return a flat dict of spendlines, keys are tuples of the hierarchical name
+    '''
+    out_dict = {}
+    
+    def _dig(in_struct, name=None):
+        # if _debug: print('entering dig with', in_struct)
+        if name is None: name = []
+        
+
+
+        if isinstance(first_elem(in_struct), dict):
+            if _debug: print('in a dict')
+            for s in in_struct:
+                print('digging to ', s)
+                _dig(in_struct[s], name + [s])
+                
+        elif isinstance(first_elem(in_struct), list):
+            if _debug: print('in a list')
+            for s in in_struct:
+                _dig(s, name + ['list'])     
+                
+        else: # can't get it to use isinstance to id spendline here so have to do by default :/
+            if _debug: print('in a spendline I ASSUME - type ', type(first_elem(in_struct)))
+            for l in in_struct:
+                if _debug: print('element is ', l)
+                out_dict[tuple(name + [l])] = in_struct[l]
+
+   
+    _dig(struct)
+
+    return out_dict
+
+###_________________________________________________________________________###
 
 
 def impute_peak_sales(df_slice, cutoff, shed, coh_growth_pa, term_growth_pa, ave_interval=3, 
@@ -257,7 +325,7 @@ def make_shapes(policy):
     '''Helper function to generate arrays for plotting to visualise the shapes
     (rather than for further calculations)
 
-    Input is a list of SpendLine instances
+    Input is a list or dict of SpendLine instances
     Returns the corresponding shapes, after aligning across launch delays
     '''
     min_delay = 0
@@ -291,8 +359,7 @@ def make_shapes(policy):
 
     return pd.DataFrame(out).T
 
-#_________________________________________________________________________##
-
+##_________________________________________________________________________##
 
 
 def plot_ann_diffs(projs, max_yrs=5, fig=None, ax=None, figsize=None, 
@@ -344,8 +411,6 @@ def plot_ann_diffs(projs, max_yrs=5, fig=None, ax=None, figsize=None,
 
     if table:
         ax.set_xticks([])
-        print(type(diffs))
-        print(diffs.head())
 
         rows = []
         for x in diffs:
@@ -480,15 +545,12 @@ def plot_diffs_ann_bar(start_m, n_pers, max_yrs=5,
 
     if table:
         ax.set_xticks([])
-        print(type(annual_diffs))
-        print(annual_diffs.head())
 
         rows = []
         for x in annual_diffs:
             rows.append(["{:0.2f}".format(y) for y in annual_diffs[x]])
 
         c_labels = list(annual_diffs.index)
-        print(rows)
         tab = ax.table(cellText=rows, colLabels=c_labels, rowLabels= ['    £m  '])
         tab.set_fontsize(12)
         tab.scale(1,2)
