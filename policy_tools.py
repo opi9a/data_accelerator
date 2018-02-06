@@ -147,7 +147,7 @@ def flatten(struct, _debug=False):
         if isinstance(first_elem(in_struct), dict):
             if _debug: print('in a dict')
             for s in in_struct:
-                print('digging to ', s)
+                if _debug: print('digging to ', s)
                 _dig(in_struct[s], name + [s])
                 
         elif isinstance(first_elem(in_struct), list):
@@ -321,13 +321,15 @@ def make_profile_shape(peak_sales_pm, shed, _debug=False):
 ##_________________________________________________________________________##
 
 
-def make_shapes(policy):
+def make_shapes(policy, flat=False, _debug=False):
     '''Helper function to generate arrays for plotting to visualise the shapes
     (rather than for further calculations)
 
     Input is a list or dict of SpendLine instances
     Returns the corresponding shapes, after aligning across launch delays
     '''
+    if flat: policy = flatten(policy, _debug=_debug)
+
     min_delay = 0
     max_delay = 0
 
@@ -371,7 +373,7 @@ def make_shapes(policy):
 
 ##_________________________________________________________________________##
 
-def make_shape1(shed, z_pad=0, peak_sales_pm=1, sav_rate=0, 
+def make_shape1(shed, z_pad=0, peak_sales_pm=1, annualised=True, sav_rate=0, net_spend=False, 
                 term_pad=0, term_gr=0, ser_out=True, name=None, _debug=False):
     '''Generate 
     '''
@@ -380,11 +382,15 @@ def make_shape1(shed, z_pad=0, peak_sales_pm=1, sav_rate=0,
                     np.arange(1, shed.uptake_dur+1), 
                     np.ones(shed.plat_dur) * shed.uptake_dur,
                     shed.gen_mult * shed.uptake_dur * (1+term_gr) ** np.arange(1, term_pad+1)])
+
+    if not net_spend: sav_rate=0
     
-    base *= peak_sales_pm * (1-sav_rate)
+    base *= peak_sales_pm * (1-sav_rate) / shed.uptake_dur
     
     if ser_out:
-        base = pd.Series(base, name=name)        
+        base = pd.Series(base, name=name)   
+
+    if annualised: base *=12*12     
 
     return  base
 
@@ -392,7 +398,8 @@ def make_shape1(shed, z_pad=0, peak_sales_pm=1, sav_rate=0,
 ##_________________________________________________________________________##
 
 
-def make_shapes1(pol, term_dur=12, start_m=None, synch_start=False, _debug=False):
+def make_shapes1(pol, term_dur=12, start_m=None, flat=False, synch_start=False, 
+            multi_index=False, _debug=False):
     '''For an input dict of scenarios (pol), return a df of shapes.
     
     term_dur    : minimum number of terminal periods to plot
@@ -400,11 +407,14 @@ def make_shapes1(pol, term_dur=12, start_m=None, synch_start=False, _debug=False
     synch_start : option to move index start according to negative launch delays
     '''
 
+    if flat: pol = flatten(pol, _debug=_debug)
+
     pads = [10] + [8]*4
     out = pd.DataFrame()
 
     # work out the global dimensions: maximum overhang beyond zero, and max length of shed
     for x in pol: 
+        if _debug: print(x)
         max_hang = min([pol[x].launch_delay for x in pol])
         max_len = max([(pol[x].shed.uptake_dur + pol[x].shed.plat_dur)  for x in pol])
     
@@ -421,7 +431,7 @@ def make_shapes1(pol, term_dur=12, start_m=None, synch_start=False, _debug=False
         term_pad = max_len + term_dur - pol[x].launch_delay - shed_len
         total = z_pad + shed_len + term_pad
         
-        if _debug: print(x.ljust(pads[0]), 
+        if _debug: print(str(x).ljust(pads[0]), 
                           str(shed_len).rjust(pads[1]), 
                           str(z_pad).rjust(pads[2]), 
                           str(term_pad).rjust(pads[3]),
@@ -432,7 +442,8 @@ def make_shapes1(pol, term_dur=12, start_m=None, synch_start=False, _debug=False
                                peak_sales_pm = pol[x].peak_sales_pm, 
 #                                sav_rate = pol[x].sav_rate,
                                term_pad=term_pad, 
-                               term_gr=pol[x].terminal_gr)
+                               term_gr=pol[x].terminal_gr,
+                               _debug = _debug)
                   
 
     if start_m is not None:
@@ -440,7 +451,9 @@ def make_shapes1(pol, term_dur=12, start_m=None, synch_start=False, _debug=False
             start_m = pd.Period(start_m, freq='M') + max_hang
             if _debug: print('new start m ', start_m)
         
-        out.index = pd.PeriodIndex(freq='M', start = pd.Period(start_m, freq='M'), periods=total)            
+        out.index = pd.PeriodIndex(freq='M', start = pd.Period(start_m, freq='M'), periods=total)   
+
+    if multi_index: out.columns = pd.MultiIndex.from_tuples(out.columns)         
             
     return out
 
