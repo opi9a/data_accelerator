@@ -371,6 +371,81 @@ def make_shapes(policy):
 
 ##_________________________________________________________________________##
 
+def make_shape1(shed, z_pad=0, peak_sales_pm=1, sav_rate=0, 
+                term_pad=0, term_gr=0, ser_out=True, name=None, _debug=False):
+    '''Generate 
+    '''
+    
+    base = np.concatenate([np.zeros(z_pad), 
+                    np.arange(1, shed.uptake_dur+1), 
+                    np.ones(shed.plat_dur) * shed.uptake_dur,
+                    shed.gen_mult * shed.uptake_dur * (1+term_gr) ** np.arange(1, term_pad+1)])
+    
+    base *= peak_sales_pm * (1-sav_rate)
+    
+    if ser_out:
+        base = pd.Series(base, name=name)        
+
+    return  base
+
+
+##_________________________________________________________________________##
+
+
+def make_shapes1(pol, term_dur=12, start_m=None, synch_start=False, _debug=False):
+    '''For an input dict of scenarios (pol), return a df of shapes.
+    
+    term_dur    : minimum number of terminal periods to plot
+    start_m     : optional start month, otherwise range index
+    synch_start : option to move index start according to negative launch delays
+    '''
+
+    pads = [10] + [8]*4
+    out = pd.DataFrame()
+
+    # work out the global dimensions: maximum overhang beyond zero, and max length of shed
+    for x in pol: 
+        max_hang = min([pol[x].launch_delay for x in pol])
+        max_len = max([(pol[x].shed.uptake_dur + pol[x].shed.plat_dur)  for x in pol])
+    
+    if _debug: print("line".ljust(pads[0]), 
+                      "shed_len".rjust(pads[1]), 
+                      "zpad".rjust(pads[2]), 
+                      "t pad".rjust(pads[3]),
+                      "total".rjust(pads[4]))
+           
+    # use the global dimensions to construct consistent dimensions for each shape
+    for x in pol:
+        shed_len = pol[x].shed.uptake_dur + pol[x].shed.plat_dur 
+        z_pad = pol[x].launch_delay - max_hang
+        term_pad = max_len + term_dur - pol[x].launch_delay - shed_len
+        total = z_pad + shed_len + term_pad
+        
+        if _debug: print(x.ljust(pads[0]), 
+                          str(shed_len).rjust(pads[1]), 
+                          str(z_pad).rjust(pads[2]), 
+                          str(term_pad).rjust(pads[3]),
+                          str(total).rjust(pads[4]))
+        
+        out[x] = make_shape1(pol[x].shed, 
+                               z_pad = z_pad, 
+                               peak_sales_pm = pol[x].peak_sales_pm, 
+#                                sav_rate = pol[x].sav_rate,
+                               term_pad=term_pad, 
+                               term_gr=pol[x].terminal_gr)
+                  
+
+    if start_m is not None:
+        if synch_start: 
+            start_m = pd.Period(start_m, freq='M') + max_hang
+            if _debug: print('new start m ', start_m)
+        
+        out.index = pd.PeriodIndex(freq='M', start = pd.Period(start_m, freq='M'), periods=total)            
+            
+    return out
+
+##_________________________________________________________________________##
+
 
 def plot_ann_diffs(projs, max_yrs=5, fig=None, ax=None, figsize=None, 
                     table=False, legend=None, net_spend=False, return_fig=False, save_path=None):
