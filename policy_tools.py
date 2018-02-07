@@ -374,14 +374,33 @@ def make_shapes(policy, flat=False, _debug=False):
 ##_________________________________________________________________________##
 
 def make_shape1(shed, z_pad=0, peak_sales_pm=1, annualised=True, sav_rate=0, net_spend=False, 
-                term_pad=0, term_gr=0, ser_out=True, name=None, _debug=False):
-    '''Generate 
+                term_pad=1, term_gr=0, ser_out=True, name=None, _debug=False):
+    '''Flexible function for generating shapes from sheds.
+
+    Optionally scale to peak sales, add full range of spend-related variables, eg sav_rate.
+    Everything but cohort growth - this is nonaccumulated
+    Optionally add pads before and after (z_pad, term_pad) 
+    Optionally return a pandas series or numpy array
     '''
-    
-    base = np.concatenate([np.zeros(z_pad), 
-                    np.arange(1, shed.uptake_dur+1), 
-                    np.ones(shed.plat_dur) * shed.uptake_dur,
-                    shed.gen_mult * shed.uptake_dur * (1+term_gr) ** np.arange(1, term_pad+1)])
+    pad = 10
+
+    zeros = np.zeros(z_pad)
+    uptake = np.arange(1, shed.uptake_dur+1)
+    plat = np.ones(shed.plat_dur) * shed.uptake_dur
+    term = shed.gen_mult * (shed.uptake_dur * (1+term_gr) ** np.arange(1, term_pad+1))
+
+    base = np.concatenate([zeros, uptake, plat, term])
+
+    if _debug:
+        print('shed: '.ljust(pad), shed)
+        print('zpad: '.ljust(pad), z_pad)
+        print('zeros: '.ljust(pad), zeros)
+        print('uptake: '.ljust(pad), uptake)
+        print('plat: '.ljust(pad), plat)
+        print('term: '.ljust(pad), term)
+        print('base: '.ljust(pad), base)
+
+    base = np.concatenate([zeros, uptake, plat, term])
 
     if not net_spend: sav_rate=0
     

@@ -374,6 +374,46 @@ def get_forecast(profile, l_start, l_stop, coh_growth, term_growth, scale=1,
 
 ###_________________________________________________________________________###
 
+def get_forecast1(shape, terminal_gr_pm, cohort_gr_pm, n_pers, name=None, _debug=False):
+    '''Simpler version of get_forecast().  Not yet migrated to this though.
+
+    '''
+    
+    # make starting array - the shape, extended for the number of periods
+    terminal_per = (1 + terminal_gr_pm) ** np.arange(1,n_pers - len(shape) +1) * shape[-1]
+    if _debug: print('gf1 shape ', shape)
+    if _debug: print('gf1 terminal_per ', terminal_per)
+    base_arr = np.concatenate([shape, terminal_per]) 
+    
+    # instantiate an array to build on, adding layers (copy of base_arr)
+    res = base_arr.copy()
+    
+    # use a factor to reflect cohort growth
+    growth_factor = 1
+    
+    if _debug: df_out = pd.DataFrame(base_arr, columns=[0])
+    
+    # iterate through remaining periods (already have zero)
+    for per in range(1, n_pers):
+        # first calculate the new growth factor
+        growth_factor *= (1 + cohort_gr_pm)
+        
+        # make a layer, shifting base to right and adding zeroes at start
+        layer = np.concatenate([np.zeros(per), base_arr[:-per]]) * growth_factor
+        if _debug: df_out[per] = layer
+
+        res += layer
+    
+    if _debug:
+        df_out['dfsum'] = df_out.sum(axis=1)
+        df_out['result'] = res
+        df_out['diff'] = df_out['dfsum']  - df_out['result'] 
+        return df_out
+    
+    else: return pd.Series(res, name=name)
+
+
+###_________________________________________________________________________###
 
 def find_launch(sales, *, threshold, zero_first=True):
     '''Taking a list as input, plus threshold percentage of max sales,
@@ -408,29 +448,4 @@ def find_launch(sales, *, threshold, zero_first=True):
 
 ###_________________________________________________________________________###
 
-def flatten(struct):
-    '''Return a flat dict of spendlines, keys are tuples of the hierarchical name
-    '''
-    out_dict = {}
-    
-    def _dig(in_struct, name=None):
-        if name is None: name = []
-            
-        if isinstance(first_elem(in_struct), dict):
-            for s in in_struct:
-                _dig(in_struct[s], name + [s])
-                
-        elif isinstance(first_elem(in_struct), list):
-            for s in in_struct:
-                _dig(s, name + ['list'])     
-                
-        elif isinstance(first_elem(in_struct), SpendLine):
-            for l in in_struct:
-                out_dict[tuple(name + [l])] = in_struct[l]
-    
-    _dig(struct)
-
-    return out_dict
-
-###_________________________________________________________________________###
 
