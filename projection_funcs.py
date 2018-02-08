@@ -374,43 +374,65 @@ def get_forecast(profile, l_start, l_stop, coh_growth, term_growth, scale=1,
 
 ###_________________________________________________________________________###
 
-def get_forecast1(shape, terminal_gr_pm, cohort_gr_pm, n_pers, name=None, _debug=False):
+def get_forecast1(shape, term_gr, coh_gr, n_pers, 
+                  l_stop=None, name=None, _debug=False):
     '''Simpler version of get_forecast().  Not yet migrated to this though.
+    TODO enable launch phases, eg only periods 0 to 10, (or starting after 0), 
+    rather than limiting to continuous launching through whole projection period.
+
+    If start of launches is >0, have an option to scale according to a coh_gr rate.
+
+    TODO make this the general function for projections - to accommodate either individual
+    lines (shapes - probably not the raw spendline [?]) or groups.
+
+    Actually maybe could do it to natively accept any previous stages, from shed to shapes.
+
+    NB no net spend or sav here.  Just takes what comes from shape.
 
     '''
-    
+
     # make starting array - the shape, extended for the number of periods
-    terminal_per = (1 + terminal_gr_pm) ** np.arange(1,n_pers - len(shape) +1) * shape[-1]
-    if _debug: print('gf1 shape ', shape)
+    terminal_per = (1 + term_gr) ** np.arange(1,n_pers - len(shape) +1) * shape.iat[-1]
+    if _debug: print('gf1 shape ', shape.values)
     if _debug: print('gf1 terminal_per ', terminal_per)
     base_arr = np.concatenate([shape, terminal_per]) 
-    
+    if _debug: print('gf1 base_arr ', base_arr)
+
     # instantiate an array to build on, adding layers (copy of base_arr)
     res = base_arr.copy()
     
     # use a factor to reflect cohort growth
     growth_factor = 1
     
-    if _debug: df_out = pd.DataFrame(base_arr, columns=[0])
+    if _debug: 
+        df_out = pd.DataFrame(base_arr, columns=[0])
     
+    if l_stop is not None:
+        l_pers = min(l_stop, n_pers)
+        if _debug: print('curtailing launches at')
+    else:
+        l_pers = n_pers
+        if _debug: print('launches for full interval')
+
     # iterate through remaining periods (already have zero)
-    for per in range(1, n_pers):
+    for per in range(1, l_pers):
         # first calculate the new growth factor
-        growth_factor *= (1 + cohort_gr_pm)
+        growth_factor *= (1 + coh_gr)
         
         # make a layer, shifting base to right and adding zeroes at start
         layer = np.concatenate([np.zeros(per), base_arr[:-per]]) * growth_factor
         if _debug: df_out[per] = layer
 
         res += layer
-    
-    if _debug:
+
+    if _debug: 
         df_out['dfsum'] = df_out.sum(axis=1)
         df_out['result'] = res
         df_out['diff'] = df_out['dfsum']  - df_out['result'] 
-        return df_out
+        df_out.to_pickle('logs/temp.pkl')
+        print('debug df info: ', df_out.info())
     
-    else: return pd.Series(res, name=name)
+    return pd.Series(res, name=name)
 
 
 ###_________________________________________________________________________###

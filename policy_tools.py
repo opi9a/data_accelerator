@@ -37,12 +37,20 @@ def cost_ratio(sav_rate, k1=None, k2=None, ratio=None):
 
 
 
-def dump_to_xls(res_df, outfile, policy=None, scenario=None):
+def dump_to_xls(res_df, outfile, policy=None, scenario=None, shapes=None, _debug=False):
     '''Dump a results DataFrame to an xls, with option to make shapes from a list 
-    or dict of scenarios (policy), or from a scenario alone
+    or dict of scenarios (policy), or from a scenario alone, and/or passing shapes
     '''
     writer = pd.ExcelWriter(outfile)
   
+    # initialise outputs
+    shapes_out = None
+    summary_out = None
+    params_out = None
+    main_out = res_df
+    stacked_out = None
+
+    # if a policy is passed
     if policy is not None:
 
         # find if it's one or two layers (have to do for list and dict different)
@@ -55,45 +63,70 @@ def dump_to_xls(res_df, outfile, policy=None, scenario=None):
         if not type(layer1) in [list, dict]:
             policy = [policy]
 
-        params_table = make_params_table(policy)
-        summary_table=None
+        params_out = make_params_table(policy)
+        summary_out=None
         try:
-            summary_table = params_table.append(res_df.groupby(res_df.index.year).sum())
-            summary_table.to_excel(writer, 'summary')
+            summary_out = params_out.append(res_df.groupby(res_df.index.year).sum())
         except:
-            params_table.to_excel(writer, 'params')
-        dump_shapes(policy).to_excel(writer, 'shapes')
+            if _debug: print('have a policy but failed to add summary')
 
-    if scenario is not None:
-        params_table = make_params_table(scenario)
-        summary_table=None
+        if _debug: print('making shapes from policy')
+        shapes_out = make_shapes1(policy, flat=True, multi_index=True)     
+
+
+    # if a scenario is passed
+    elif scenario is not None:
+        params_out = make_params_table(scenario)
+        summary_out = None
         try:
-            summary_table = params_table.append(res_df.groupby(res_df.index.year).sum())
-            summary_table.to_excel(writer, 'summary')
-        except:
-            params_table.to_excel(writer, 'params')
-        make_shapes(scenario).to_excel(writer, 'shapes')        
+            summary_out = params_out.append(res_df.groupby(res_df.index.year).sum())
+        except: pass
+        if _debug: print('making shapes from scenario')
+        shapes_out = make_shapes1(scenario, flat=True, multi_index=True)     
 
-    
-    res_df.to_excel(writer, 'main_res')
+
+    # if shapes are passed
+    if shapes is not None:
+        shapes_out = shapes
+        if _debug: print('writing passed shapes')
 
     # if more than one column, do a stack
     if len(res_df.columns)>1:
     # excel writer doesn't like pd.Periods it seems
         new_ind = res_df.index.to_timestamp()
-        stacked = res_df.copy().set_index(new_ind)
+        stacked_out = res_df.copy().set_index(new_ind)
         
         #need to check how many levels to work out how many times to unstack
         col_depth = len(res_df.columns.names)
 
         for d in range(col_depth):
-            stacked = stacked.stack()
+            stacked_out = stacked_out.stack()
 
-        stacked.rename('spend')
+        stacked_out.rename('spend')
         new_names = ['Date', 'SpendLine', 'Scenario']
-        stacked.index.names = new_names[:col_depth+1]
-        stacked.to_excel(writer, 'stacked')
-    
+        stacked_out.index.names = new_names[:col_depth+1]
+
+    # write out    
+    if summary_out is not None:
+        summary_out.to_excel(writer, 'summary')
+        if _debug: print('summary written')
+    elif params_out is not None: 
+        params_out.to_excel(writer, 'params')
+        if _debug: print('params written')
+
+    if shapes_out is not None:
+        shapes_out.to_excel(writer, 'shapes')
+        if _debug: print('shapes written')
+
+    if main_out is not None:
+        main_out.to_excel(writer, 'main')
+        if _debug: print('main written')
+
+    if stacked_out is not None:
+        stacked_out.to_excel(writer, 'stacked')
+        if _debug: print('stacked written')
+ 
+  
     writer.save()
 
 
@@ -373,16 +406,25 @@ def make_shapes(policy, flat=False, _debug=False):
 
 ##_________________________________________________________________________##
 
-def make_shape1(shed, z_pad=0, peak_sales_pm=1, annualised=True, sav_rate=0, net_spend=False, 
-                term_pad=1, term_gr=0, ser_out=True, name=None, _debug=False):
-    '''Flexible function for generating shapes from sheds.
+def make_shape1(spendline=None, shed=None, z_pad=0, peak_sales_pm=1, annualised=False, sav_rate=0, 
+                net_spend=False, term_pad=1, term_gr=0, ser_out=True, name=None, _debug=False):
+    '''Flexible function for generating shapes from sheds or spendlines.
 
-    Optionally scale to peak sales, add full range of spend-related variables, eg sav_rate.
     Everything but cohort growth - this is nonaccumulated
     Optionally add pads before and after (z_pad, term_pad) 
     Optionally return a pandas series or numpy array
     '''
+    
+    if _debug: print("\nIN MAKE_SHAPE1")
+
     pad = 10
+
+    if spendline is not None:
+        shed = spendline.shed
+        peak_sales_pm = spendline.peak_sales_pm
+        sav_rate = spendline.sav_rate
+        term_gr = spendline.terminal_gr
+        z_pad = spendline.launch_delay
 
     zeros = np.zeros(z_pad)
     uptake = np.arange(1, shed.uptake_dur+1)
@@ -398,7 +440,10 @@ def make_shape1(shed, z_pad=0, peak_sales_pm=1, annualised=True, sav_rate=0, net
         print('uptake: '.ljust(pad), uptake)
         print('plat: '.ljust(pad), plat)
         print('term: '.ljust(pad), term)
+        print('net spend: '.ljust(pad), net_spend)
+        print('sav_rate: '.ljust(pad), sav_rate)
         print('base: '.ljust(pad), base)
+
 
     base = np.concatenate([zeros, uptake, plat, term])
 
@@ -411,31 +456,32 @@ def make_shape1(shed, z_pad=0, peak_sales_pm=1, annualised=True, sav_rate=0, net
 
     if annualised: base *=12*12     
 
-    return  base
+    return base
 
 
 ##_________________________________________________________________________##
 
 
-def make_shapes1(pol, term_dur=12, start_m=None, flat=False, synch_start=False, 
-            multi_index=False, _debug=False):
-    '''For an input dict of scenarios (pol), return a df of shapes.
+def make_shapes1(scens, term_dur=12, start_m=None, flat=False, synch_start=False, 
+                net_spend=False, sav_rate=0, multi_index=False, _debug=False):
+    '''For an input dict of scenarios (scens), return a df of shapes,
+    ensuring differential launch times are handled.
     
     term_dur    : minimum number of terminal periods to plot
     start_m     : optional start month, otherwise range index
     synch_start : option to move index start according to negative launch delays
     '''
+    if _debug: print("\nIN MAKE_SHAPES1")
+    if flat: scens = flatten(scens, _debug=_debug)
 
-    if flat: pol = flatten(pol, _debug=_debug)
-
-    pads = [10] + [8]*4
+    pads = [15] + [8]*4
     out = pd.DataFrame()
 
     # work out the global dimensions: maximum overhang beyond zero, and max length of shed
-    for x in pol: 
+    for x in scens: 
         if _debug: print(x)
-        max_hang = min([pol[x].launch_delay for x in pol])
-        max_len = max([(pol[x].shed.uptake_dur + pol[x].shed.plat_dur)  for x in pol])
+        max_hang = min([scens[x].launch_delay for x in scens])
+        max_len = max([(scens[x].shed.uptake_dur + scens[x].shed.plat_dur)  for x in scens])
     
     if _debug: print("line".ljust(pads[0]), 
                       "shed_len".rjust(pads[1]), 
@@ -444,10 +490,10 @@ def make_shapes1(pol, term_dur=12, start_m=None, flat=False, synch_start=False,
                       "total".rjust(pads[4]))
            
     # use the global dimensions to construct consistent dimensions for each shape
-    for x in pol:
-        shed_len = pol[x].shed.uptake_dur + pol[x].shed.plat_dur 
-        z_pad = pol[x].launch_delay - max_hang
-        term_pad = max_len + term_dur - pol[x].launch_delay - shed_len
+    for x in scens:
+        shed_len = scens[x].shed.uptake_dur + scens[x].shed.plat_dur 
+        z_pad = scens[x].launch_delay - max_hang
+        term_pad = max_len + term_dur - scens[x].launch_delay - shed_len
         total = z_pad + shed_len + term_pad
         
         if _debug: print(str(x).ljust(pads[0]), 
@@ -456,12 +502,13 @@ def make_shapes1(pol, term_dur=12, start_m=None, flat=False, synch_start=False,
                           str(term_pad).rjust(pads[3]),
                           str(total).rjust(pads[4]))
         
-        out[x] = make_shape1(pol[x].shed, 
+        out[x] = make_shape1(shed = scens[x].shed, 
                                z_pad = z_pad, 
-                               peak_sales_pm = pol[x].peak_sales_pm, 
-#                                sav_rate = pol[x].sav_rate,
+                               peak_sales_pm = scens[x].peak_sales_pm, 
+                               sav_rate = scens[x].sav_rate,
+                               net_spend = net_spend,
                                term_pad=term_pad, 
-                               term_gr=pol[x].terminal_gr,
+                               term_gr=scens[x].terminal_gr,
                                _debug = _debug)
                   
 
@@ -779,12 +826,17 @@ def plot_shapes_line(policy, annualise=True, fig=None, ax=None, figsize=None, re
 
 
 def project_policy(policy, start_m='1-2019', n_pers=120, 
-                    synch_start=True, net_spend=False, diffs_out=False, annual=False):  
+                    synch_start=True, diffs_out=False, annual=False, net_spend=True,
+                    nans_to_zero=True, multi_index=True, _debug=False):  
     '''For a list of spendlines (with a start month and number of periods),
     returns a df with projections.
     
     The function orients individual  projections according to the launch delays
     across the whole set of spendlines, inserting spacers as necessary.
+
+    Does not apply any savings assumptions - these need to happen before or after.
+
+    Note this can't work on just shapes - needs terminal growth and coh growth
     
     PARAMETERS
     
@@ -800,49 +852,51 @@ def project_policy(policy, start_m='1-2019', n_pers=120,
                :  This is like saying that start_m is actually period zero, but 
                :  earlier periods are possible.  This lets different sets of policies be
                :  oriented correctly in time.
-
-    net_spend  : return spend net of savings (sav_rate of SpendLine)
-               
+               : Note this goes through make_shapes1
+              
     n_pers     : number of periods to project.  Normally months
     
     '''
-    min_delay = 0
-    out = []
+    
+    out = pd.DataFrame()
 
-    # find the minimum launch delay - NB likely negative if any effects
+    policy = flatten(policy, _debug=_debug)
+
+    # need to work out the max overhang.  NB this is also done in make_shapes1
+    max_hang = None
+    for x in policy: 
+        if _debug: print(x)
+        max_hang = min([policy[x].launch_delay for x in policy])
+
+    # get the shapes - keys will be same as col heads
+    # NB MUST PASS NET SPEND FLAG.  The policy carries the sav rates
+    shapes = make_shapes1(policy, term_dur=0, start_m=start_m, net_spend=True,
+                        flat=True, multi_index=False, synch_start=synch_start, _debug=_debug)
+    if _debug: print('shapes returned:\n', shapes.head())
+
+    # can now iterate through shapes, and cross ref the spendline
     for s in policy:
-        # make it work with a dict or a list
-        if isinstance(policy, dict): s = policy[s]
-        if s.launch_delay < min_delay: min_delay = s.launch_delay
-   
+        if _debug: print('column: ', s)
+        out[s] = pf.get_forecast1(shapes[s], policy[s].terminal_gr,
+                                             policy[s].cohort_gr, 
+                                             n_pers)[:n_pers - max_hang]
 
-    # reset start date 
-    if synch_start:
-        start_m = pd.Period(start_m, freq='M') + min_delay
 
-    for s in policy:
-        if isinstance(policy, dict): s = policy[s]
-        spacer = s.launch_delay - min_delay
-        spaced_shape = np.concatenate([np.zeros(spacer), s.get_shape()])
-        spend_out = pd.Series(pf.get_forecast(spaced_shape, coh_growth=s.cohort_gr/12, 
-                                                term_growth=s.terminal_gr/12, 
-                                                l_start=0, l_stop=n_pers, 
-                                                name=s.name))
-        if net_spend:
-            spend_out *= (1-s.sav_rate)
-        out.append(spend_out)
+    ind = pd.PeriodIndex(start=start_m, freq='M', periods=n_pers - max_hang)
+    if _debug: print('returned projection length: ', n_pers - max_hang)
+    out.index = ind
 
-    ind = pd.PeriodIndex(start=start_m, freq='M', periods=n_pers)
-    df = pd.DataFrame(out).T
-    df.index = ind
+    if multi_index: out.columns=pd.MultiIndex.from_tuples(out.columns)
 
     if diffs_out:
-        df = df.iloc[:,1:].subtract(df.iloc[:,0], axis=0)
+        out = out.iloc[:,1:].subtract(out.iloc[:,0], axis=0)
 
     if annual:
-        df = df.groupby(df.index.year).sum()
+        out = out.groupby(out.index.year).sum()
 
-    return df
+    if nans_to_zero: out[out.isnull()] = 0
+
+    return out
 
 
 
@@ -883,7 +937,8 @@ class SpendLine():
 
     launch_delay    : negative if launch brought fwd
     cohort_gr       : cohort growth rate
-    peak_sales_pa      : peak sales to which profile is normalised
+    peak_sales_pm   : peak sales to which profile is normalised
+    sav_rate        : proportion of sales that substitute other drug spend
 
     '''
     def __init__(self, name, shed, terminal_gr=0, launch_delay=0, cohort_gr=0, peak_sales_pm=1, sav_rate=0):
