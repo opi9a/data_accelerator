@@ -41,19 +41,18 @@ def dump_to_xls(res_df, outfile, policy=None, scenario=None, shapes=None, _debug
     '''Dump a results DataFrame to an xls, with option to make shapes from a list 
     or dict of scenarios (policy), or from a scenario alone, and/or passing shapes
     '''
-    writer = pd.ExcelWriter(outfile)
-  
-    # initialise outputs
-    shapes_out = None
-    summary_out = None
-    params_out = None
-    main_out = res_df
-    stacked_out = None
+ 
+    # initialise vars
+    params_header = None
+    shapes_body = None
 
+    # first get the params header and shapes, depending on input
     # if a policy is passed
     if policy is not None:
 
         # find if it's one or two layers (have to do for list and dict different)
+        # should be able to use flatten() to replace this mess, not tried yet
+        # (or use flatten as an option in make_params_table probably better)
         if isinstance(policy, dict):
             layer1 = policy[list(policy.keys())[0]]
 
@@ -63,70 +62,35 @@ def dump_to_xls(res_df, outfile, policy=None, scenario=None, shapes=None, _debug
         if not type(layer1) in [list, dict]:
             policy = [policy]
 
-        params_out = make_params_table(policy)
-        summary_out=None
-        try:
-            summary_out = params_out.append(res_df.groupby(res_df.index.year).sum())
-        except:
-            if _debug: print('have a policy but failed to add summary')
+        params_header = make_params_table(policy)
+        shapes_body = make_shapes1(policy, flat=True, multi_index=True)
 
-        if _debug: print('making shapes from policy')
-        shapes_out = make_shapes1(policy, flat=True, multi_index=True)     
+        if _debug: print('got header and shapes from policy')
 
 
     # if a scenario is passed
     elif scenario is not None:
-        params_out = make_params_table(scenario)
-        summary_out = None
-        try:
-            summary_out = params_out.append(res_df.groupby(res_df.index.year).sum())
-        except: pass
+        params_header = make_params_table(scenario)
+        shapes_body = make_shapes1(scenario, flat=True, multi_index=True)     
         if _debug: print('making shapes from scenario')
-        shapes_out = make_shapes1(scenario, flat=True, multi_index=True)     
 
 
     # if shapes are passed
     if shapes is not None:
-        shapes_out = shapes
+        shapes_body = shapes
         if _debug: print('writing passed shapes')
 
-    # if more than one column, do a stack
-    if len(res_df.columns)>1:
-    # excel writer doesn't like pd.Periods it seems
-        new_ind = res_df.index.to_timestamp()
-        stacked_out = res_df.copy().set_index(new_ind)
-        
-        #need to check how many levels to work out how many times to unstack
-        col_depth = len(res_df.columns.names)
+    # assemble outputs
+    shapes_out = params_header.append(shapes_body)
+    main_out = params_header.append(res_df)
+    annual_out = params_header.append(res_df.groupby(res_df.index.year).sum())
 
-        for d in range(col_depth):
-            stacked_out = stacked_out.stack()
+    # write out
+    writer = pd.ExcelWriter(outfile)
+    shapes_out.to_excel(writer, 'shapes')
+    main_out.to_excel(writer, 'main')
+    annual_out.to_excel(writer, 'annual')
 
-        stacked_out.rename('spend')
-        new_names = ['Date', 'SpendLine', 'Scenario']
-        stacked_out.index.names = new_names[:col_depth+1]
-
-    # write out    
-    if summary_out is not None:
-        summary_out.to_excel(writer, 'summary')
-        if _debug: print('summary written')
-    elif params_out is not None: 
-        params_out.to_excel(writer, 'params')
-        if _debug: print('params written')
-
-    if shapes_out is not None:
-        shapes_out.to_excel(writer, 'shapes')
-        if _debug: print('shapes written')
-
-    if main_out is not None:
-        main_out.to_excel(writer, 'main')
-        if _debug: print('main written')
-
-    if stacked_out is not None:
-        stacked_out.to_excel(writer, 'stacked')
-        if _debug: print('stacked written')
- 
-  
     writer.save()
 
 
@@ -260,7 +224,9 @@ def impute_peak_sales(df_slice, cutoff, shed, coh_growth_pa, term_growth_pa, ave
 def make_params_table(pol_dict, index=None):
 
     if index is None:
-        index = 'peak_sales_pa sav_rate uptake_dur plat_dur gen_mult term_gr coh_gr'.split()
+        index = """peak_sales_pa peak_sales_pm sav_rate 
+                    uptake_dur plat_dur gen_mult launch_delay
+                    term_gr_pa term_gr_pm coh_gr_pa coh_gr_pm""".split()
 
     df = pd.DataFrame(index=index)
 
@@ -269,11 +235,17 @@ def make_params_table(pol_dict, index=None):
         # sub_df=pd.DataFrame(index=index)
         for q in low_dict:
             params = [low_dict[q].peak_sales_pm*12*12, # double annualised
+                     low_dict[q].peak_sales_pm,
                      low_dict[q].sav_rate,
+
                      int(low_dict[q].shed.uptake_dur),
                      int(low_dict[q].shed.plat_dur),
                      low_dict[q].shed.gen_mult,
+                     low_dict[q].launch_delay,
+
+                     low_dict[q].terminal_gr*12,
                      low_dict[q].terminal_gr,
+                     low_dict[q].cohort_gr*12,
                      low_dict[q].cohort_gr]
 
             # if doing this in a 2 layer dict, need to get a tuple column name
