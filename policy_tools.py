@@ -5,15 +5,16 @@ from matplotlib import rcParams
 import matplotlib.ticker as ticker
 import projection_funcs as pf
 from collections import namedtuple
+import inspect
 
 
-def cost_ratio(sav_rate, k1=None, k2=None, ratio=None):
-    '''Returns the cost ratio (multiplier) to apply to baseline costs 
+def spend_mult(sav_rate, k1=None, k2=None, ratio=None):
+    '''Returns the multiplier to apply to baseline spend 
     to reflect a change in threshold (k1->k2), given the savings (drugs substitution)
     as a proportion r of the original costs
 
     k1 = (C1 - s)/dQ : k is cost/QALY, c is cost of drug, s is savings
-    r = sC1          : r is savings as proportion of initial costs
+    s = rC1, r=s/C1  : r is savings as proportion of initial costs
     k1 = (1-r)C1     : assume dQ is 1 as effects are all relative
     C1 = k1/(1-r)
     k2 = C2 -rC1; C2 = k2 + rC1 = k2 + rk1/(1-r)
@@ -29,7 +30,6 @@ def cost_ratio(sav_rate, k1=None, k2=None, ratio=None):
         
         else: ratio = k2/k1
 
-
     return ((1-r)*(ratio)) + r
 
 
@@ -37,42 +37,25 @@ def cost_ratio(sav_rate, k1=None, k2=None, ratio=None):
 
 
 
-def dump_to_xls(res_df, outfile, policy=None, scenario=None, shapes=None, _debug=False):
-    '''Dump a results DataFrame to an xls, with option to make shapes from a list 
-    or dict of scenarios (policy), or from a scenario alone, and/or passing shapes
+def dump_to_xls(res_df, outfile, in_dict=None, shapes=None, log=False, _debug=False):
+    '''Dump a results DataFrame to an xls, with option to make shapes from a  
+     dict of scenarios or from a scenario alone, and/or passing shapes
     '''
- 
+    if _debug: print("\nIN FUNCTION:  ".ljust(20), inspect.stack()[0][3])
+    if _debug: print("..called by:  ".ljust(20), inspect.stack()[1][3], end="\n\n")
+
     # initialise vars
     params_header = None
     shapes_body = None
 
     # first get the params header and shapes, depending on input
     # if a policy is passed
-    if policy is not None:
+    params_header = make_params_table(in_dict, log=log, _debug=_debug)
+    shapes_body = make_shapes1(in_dict, flat=True, multi_index=True)
 
-        # find if it's one or two layers (have to do for list and dict different)
-        # should be able to use flatten() to replace this mess, not tried yet
-        # (or use flatten as an option in make_params_table probably better)
-        if isinstance(policy, dict):
-            layer1 = policy[list(policy.keys())[0]]
-
-        elif isinstance(policy, list):
-            layer1 = policy[0]
-
-        if not type(layer1) in [list, dict]:
-            policy = [policy]
-
-        params_header = make_params_table(policy)
-        shapes_body = make_shapes1(policy, flat=True, multi_index=True)
-
-        if _debug: print('got header and shapes from policy')
-
-
-    # if a scenario is passed
-    elif scenario is not None:
-        params_header = make_params_table(scenario)
-        shapes_body = make_shapes1(scenario, flat=True, multi_index=True)     
-        if _debug: print('making shapes from scenario')
+    if _debug: print('\ngot header and shapes from in_dict:\n')
+    if _debug: print(params_header, end="\n\n")
+    if _debug: print(shapes_body.head(), end="\n")
 
 
     # if shapes are passed
@@ -92,6 +75,8 @@ def dump_to_xls(res_df, outfile, policy=None, scenario=None, shapes=None, _debug
     annual_out.to_excel(writer, 'annual')
 
     writer.save()
+
+    if _debug: print("\LEAVING:  ", inspect.stack()[0][3])
 
 
 ##_________________________________________________________________________##
@@ -166,25 +151,27 @@ def flatten(struct, _debug=False):
 ###_________________________________________________________________________###
 
 
-def impute_peak_sales(df_slice, cutoff, shed, coh_growth_pa, term_growth_pa, ave_interval=3, 
+def impute_peak_spend(df_slice, cutoff, shed, coh_gr, term_gr, ave_interval=3, 
                         _debug=False):
     '''For an input df slice (NB not by launch date), and lifecycle shape, 
-    returns the impled peak sales associated with the lifecycle shape
+    returns the impled peak spend associated with the lifecycle shape
     (i.e. for an individual product or cohort).
     
-    Returns peak sales per period for one period's worth of launches.  
-    So if period is month, multiply *12*12 for peak sales pa of a year of launches.
+    NOTE CHANGED TO MONTTLY GROWTH INPUTS
+
+    Returns peak spend per period for one period's worth of launches.  
+    So if period is month, multiply *12*12 for peak spend pa of a year of launches.
     
-    ave_interval is the interval over which terminal sales in the observed set is calculated
+    ave_interval is the interval over which terminal spend in the observed set is calculated
 
-    Works by comparing a synthetic cumulation based on the lifecycle shape with actual sales, 
-    initial ('stub') sales since a cutoff date.
+    Works by comparing a synthetic cumulation based on the lifecycle shape with actual spend, 
+    initial ('stub') spend since a cutoff date.
 
-    First make the synthetic cumulation, scaled to peak sales = 1.
+    First make the synthetic cumulation, scaled to peak spend = 1.
     Then align the initial period with the start date of the stub.
-    Then get the actual sales at the end of the observed stub 'end_sales'.
-    Compare this to the sales at the corresponding period of the synthetic cumulation
-    The ratio of these is the implied lifecycle peak sales.
+    Then get the actual spend at the end of the observed stub 'end_spend'.
+    Compare this to the spend at the corresponding period of the synthetic cumulation
+    The ratio of these is the implied lifecycle peak spend.
     '''
         
     # make sure cutoff is a period (will take a string here)
@@ -194,21 +181,21 @@ def impute_peak_sales(df_slice, cutoff, shed, coh_growth_pa, term_growth_pa, ave
     n_pers = df_slice.columns[-1] - cutoff
     if _debug: print('npers', n_pers)
     
-    # get last real observations - only need sales in last period really
+    # get last real observations - only need spend in last period really
     ixs = pf.get_ix_slice(df_slice, dict(start_month=slice(cutoff,None,None)))
     summed = df_slice.loc[ixs,:].sum()
     
     if _debug: print('summed df tail\n', summed.tail())
 
-    end_sales = summed[-ave_interval:].mean()
-    if _debug: print('end_sales {:0,.0f}'.format(end_sales))
+    end_spend = summed[-ave_interval:].mean()
+    if _debug: print('end_spend {:0,.0f}'.format(end_spend))
 
     # make unscaled simulated cumulation
     shape = make_profile_shape(1, shed)
     if _debug: print("shape\n", shape)
 
     sim = pf.get_forecast(shape, l_start=0, l_stop=n_pers, 
-                          coh_growth=coh_growth_pa/12, term_growth=term_growth_pa/12)
+                          coh_growth=coh_gr, term_growth=term_gr)
 
     if _debug: print('tail of cumulation\n', sim.tail())
 
@@ -216,69 +203,83 @@ def impute_peak_sales(df_slice, cutoff, shed, coh_growth_pa, term_growth_pa, ave
 
     if _debug: print('end_sim tail', end_sim)
 
-    return end_sales / end_sim
+    return end_spend / end_sim
 
 ##_________________________________________________________________________##
 
+def make_log(in_dict, _debug=False):
+    '''Return a df with log contents of an input dict containing spendlines
+    '''
+    pad = 25
+    if _debug: print("\nIN FUNCTION:  ".ljust(20), inspect.stack()[0][3])
+    if _debug: print("..called by:  ".ljust(20), inspect.stack()[1][3], end="\n\n")
 
-def make_params_table(pol_dict, index=None):
+    # first get a flat dict
+    flat = flatten(in_dict)
+
+    # instantiate the dataframe with the keys
+    df = pd.DataFrame(columns=flat.keys())
+
+    # now go through each spend line, and then each log entry
+    for line in flat:
+        if _debug: print('now in spend line'.ljust(pad), line)
+        if _debug: print('log is'.ljust(pad), flat[line].log)
+        for entry in flat[line].log:
+            if _debug: print('now in log entry'.ljust(pad), entry)
+            df.loc[entry, line] = flat[line].log[entry]
+    
+    df.columns = pd.MultiIndex.from_tuples(df.columns)
+
+    if _debug: print('leaving ', inspect.stack()[0][3])
+
+    return df
+
+##_________________________________________________________________________##
+
+def make_params_table(pol_dict, index=None, log=False, _debug=False):
+    '''Constructs a dataframe with parameters for spendlines in an input dict.
+
+    There's a default set of row names - pass your own index if reqd
+
+    TODO auto pick up index
+    '''
+    if _debug: print("\nIN FUNCTION:  ".ljust(20), inspect.stack()[0][3])
+    if _debug: print("..called by:  ".ljust(20), inspect.stack()[1][3], end="\n\n")
 
     if index is None:
-        index = """peak_sales_pa peak_sales_pm sav_rate 
+        index = """peak_spend_pa peak_spend icer sav_rate 
                     uptake_dur plat_dur gen_mult launch_delay
                     term_gr_pa term_gr_pm coh_gr_pa coh_gr_pm""".split()
 
     df = pd.DataFrame(index=index)
 
-    # make an internal func, so this works with 1 or 2 layer dicts
-    def _get_stuff(low_dict, parent=None):
-        # sub_df=pd.DataFrame(index=index)
-        for q in low_dict:
-            params = [low_dict[q].peak_sales_pm*12*12, # double annualised
-                     low_dict[q].peak_sales_pm,
-                     low_dict[q].sav_rate,
+    flat_dict = flatten(pol_dict)
 
-                     int(low_dict[q].shed.uptake_dur),
-                     int(low_dict[q].shed.plat_dur),
-                     low_dict[q].shed.gen_mult,
-                     low_dict[q].launch_delay,
+    for q in flat_dict:
+        params = [flat_dict[q].peak_spend*12*12, # double annualised
+                 flat_dict[q].peak_spend,
+                 flat_dict[q].icer,
+                 flat_dict[q].sav_rate,
 
-                     low_dict[q].terminal_gr*12,
-                     low_dict[q].terminal_gr,
-                     low_dict[q].cohort_gr*12,
-                     low_dict[q].cohort_gr]
+                 int(flat_dict[q].shed.uptake_dur),
+                 int(flat_dict[q].shed.plat_dur),
+                 flat_dict[q].shed.gen_mult,
+                 flat_dict[q].launch_delay,
 
-            # if doing this in a 2 layer dict, need to get a tuple column name
-            if parent is None:
-                col_name = q
-            else: 
-                col_name = (parent, q)
-            df[col_name] = params
+                 flat_dict[q].term_gr*12,
+                 flat_dict[q].term_gr,
+                 flat_dict[q].coh_gr*12,
+                 flat_dict[q].coh_gr]
 
+        df[q] = params
 
-    # case if 1 layer dict(i.e. a single scenario)
+    
+    if log: df = df.append(make_log(pol_dict, _debug=_debug))
 
-    # find if it's one or two layers (have to do for list and dict different)
-    if isinstance(pol_dict, dict):
-        layer1 = pol_dict[list(pol_dict.keys())[0]]
+    df.columns = pd.MultiIndex.from_tuples(df.columns)
 
-    elif isinstance(pol_dict, list):
-        layer1 = pol_dict[0]
+    if _debug: print('leaving ', inspect.stack()[0][3])
 
-    if not type(layer1) in [list, dict]:
-        _get_stuff(pol_dict)
-
-    else:
-        for p in pol_dict:
-            if isinstance(pol_dict, dict):
-                _get_stuff(pol_dict[p], p)
-
-            elif isinstance(pol_dict, list):
-                _get_stuff(p)
-
-    try:
-        df.columns = pd.MultiIndex.from_tuples(df.columns)
-    except: pass
     return df
 
 #_________________________________________________________________________##
@@ -311,23 +312,24 @@ def make_profile_pts(in_points, _debug=False):
 ##_________________________________________________________________________##
 
 
-def make_profile_shape(peak_sales_pm, shed, _debug=False):
+def make_profile_shape(peak_spend, shed, _debug=False):
     '''Returns a profile (np.array) from input description of lifecycle shape
     (shed namedtuple with fields 'shed_name', 'uptake_dur', 'plat_dur', 'gen_mult',
-    and peak sales.
+    and peak spend.
     '''
     prof = np.array([float(shed.uptake_dur)] * (shed.uptake_dur+shed.plat_dur+1))
     prof[:shed.uptake_dur-1] = np.arange(1,shed.uptake_dur)
     prof[-1] = (shed.uptake_dur * shed.gen_mult)
 
-    return prof * peak_sales_pm / max(prof)
+    return prof * peak_spend / max(prof)
 
 
 ##_________________________________________________________________________##
 
 
 def make_shapes(policy, flat=False, _debug=False):
-    '''Helper function to generate arrays for plotting to visualise the shapes
+    ''' DEPRECATED -  make_shapes1() better
+    Helper function to generate arrays for plotting to visualise the shapes
     (rather than for further calculations)
 
     Input is a list or dict of SpendLine instances
@@ -357,11 +359,11 @@ def make_shapes(policy, flat=False, _debug=False):
         
         # assemble the elements
         spacer = s.launch_delay - min_delay
-        main_phase = make_profile_shape(s.peak_sales_pm, s.shed)
+        main_phase = make_profile_shape(s.peak_spend, s.shed)
 
         # calculate any additional terminal growth period, so all spendlines line up
         tail = 12 + max_delay - s.launch_delay
-        terminus = main_phase[-1] * ((1+s.terminal_gr)** np.arange(1,tail))
+        terminus = main_phase[-1] * ((1+s.term_gr)** np.arange(1,tail))
         
 
         ser = pd.Series(np.concatenate([np.zeros(spacer), main_phase, terminus]), name=name)
@@ -378,7 +380,7 @@ def make_shapes(policy, flat=False, _debug=False):
 
 ##_________________________________________________________________________##
 
-def make_shape1(spendline=None, shed=None, z_pad=0, peak_sales_pm=1, annualised=False, sav_rate=0, 
+def make_shape1(spendline=None, shed=None, z_pad=0, peak_spend=1, annualised=False, sav_rate=0, 
                 net_spend=False, term_pad=1, term_gr=0, ser_out=True, name=None, _debug=False):
     '''Flexible function for generating shapes from sheds or spendlines.
 
@@ -393,9 +395,9 @@ def make_shape1(spendline=None, shed=None, z_pad=0, peak_sales_pm=1, annualised=
 
     if spendline is not None:
         shed = spendline.shed
-        peak_sales_pm = spendline.peak_sales_pm
+        peak_spend = spendline.peak_spend
         sav_rate = spendline.sav_rate
-        term_gr = spendline.terminal_gr
+        term_gr = spendline.term_gr
         z_pad = spendline.launch_delay
 
     zeros = np.zeros(z_pad)
@@ -421,7 +423,7 @@ def make_shape1(spendline=None, shed=None, z_pad=0, peak_sales_pm=1, annualised=
 
     if not net_spend: sav_rate=0
     
-    base *= peak_sales_pm * (1-sav_rate) / shed.uptake_dur
+    base *= peak_spend * (1-sav_rate) / shed.uptake_dur
     
     if ser_out:
         base = pd.Series(base, name=name)   
@@ -434,8 +436,8 @@ def make_shape1(spendline=None, shed=None, z_pad=0, peak_sales_pm=1, annualised=
 ##_________________________________________________________________________##
 
 
-def make_shapes1(scens, term_dur=12, start_m=None, flat=False, synch_start=False, 
-                net_spend=False, sav_rate=0, multi_index=False, _debug=False):
+def make_shapes1(scens, term_dur=0, start_m=None, flat=True, synch_start=False, 
+                net_spend=True, multi_index=True, _debug=False):
     '''For an input dict of scenarios (scens), return a df of shapes,
     ensuring differential launch times are handled.
     
@@ -443,7 +445,10 @@ def make_shapes1(scens, term_dur=12, start_m=None, flat=False, synch_start=False
     start_m     : optional start month, otherwise range index
     synch_start : option to move index start according to negative launch delays
     '''
-    if _debug: print("\nIN MAKE_SHAPES1")
+    pad = 25
+    if _debug: print("\nIN FUNCTION:  ".ljust(20), inspect.stack()[0][3])
+    if _debug: print("..called by:  ".ljust(20), inspect.stack()[1][3], end="\n\n")
+
     if flat: scens = flatten(scens, _debug=_debug)
 
     pads = [15] + [8]*4
@@ -476,11 +481,11 @@ def make_shapes1(scens, term_dur=12, start_m=None, flat=False, synch_start=False
         
         out[x] = make_shape1(shed = scens[x].shed, 
                                z_pad = z_pad, 
-                               peak_sales_pm = scens[x].peak_sales_pm, 
+                               peak_spend = scens[x].peak_spend, 
                                sav_rate = scens[x].sav_rate,
                                net_spend = net_spend,
                                term_pad=term_pad, 
-                               term_gr=scens[x].terminal_gr,
+                               term_gr=scens[x].term_gr,
                                _debug = _debug)
                   
 
@@ -495,128 +500,6 @@ def make_shapes1(scens, term_dur=12, start_m=None, flat=False, synch_start=False
             
     return out
 
-##_________________________________________________________________________##
-
-
-def plot_ann_diffs(projs, max_yrs=5, fig=None, ax=None, figsize=None, 
-                    table=False, legend=None, net_spend=False, return_fig=False, save_path=None):
-    '''Plots a bar chart of annual data, subtracting the first column
-    Can either generate a new plot, or add to existing axis (in which case pass ax)
-    '''
-
-
-    diffs = projs.iloc[:,1:].subtract(projs.iloc[:,0], axis=0)
-    diffs = diffs.groupby(diffs.index.year).sum().iloc[:max_yrs,:]
-
-    ind = diffs.index
-
-
-    # set the name of the counterfactual
-    col_zero = projs.columns[0]
-    if isinstance(col_zero, tuple):
-        counterfactual_name = col_zero[0]
-    else: counterfactual_name = col_zero
-
-    # create fig and ax, unless passed (which they will be if plotting in existing grid)
-    if fig is None and ax is None:
-        fig, ax = plt.subplots(figsize=figsize)
-
-    num_rects = len(diffs.columns)
-    rect_width = 0.5
-    gap = 0.45
-    for i, x in enumerate(diffs):
-        rect = ax.bar(diffs.index + ((i/num_rects)*(1-gap)), diffs[x], 
-                        width=rect_width/num_rects) 
-    title_str = ""
-    if net_spend: title_str = " net"
-
-    ax.set_title("Difference in{} annual spend vs ".format(title_str) + counterfactual_name +", £m")
-    ax.tick_params(axis='x', bottom='off')
-    ax.grid(False, axis='x')
-    # for t in ax.get_xticklabels():
-    #     t.set_rotation(45)
-    ax.xaxis.set_major_locator(ticker.MultipleLocator(1))
-    ax.set_yticklabels(['{:,}'.format(int(x)) for x in ax.get_yticks().tolist()])
-    
-    if legend is not None:
-        ax.legend(legend)
-
-    else:
-        ax.legend(diffs.columns)
-        if len(diffs.columns)>2:  ax.legend(diffs.columns)
-
-    if table:
-        ax.set_xticks([])
-
-        rows = []
-        for x in diffs:
-            rows.append(["{:0.2f}".format(y) for y in diffs[x]])
-
-        row_labs = None
-        if legend: row_labs = legend
-        else: row_labs = diffs.columns
-
-        c_labels = list(diffs.index)
-        tab = ax.table(cellText=rows, colLabels=c_labels, rowLabels= row_labs)
-        tab.set_fontsize(12)
-        tab.scale(1,2)
-        tab.auto_set_font_size
-
-    if save_path is not None:
-        fig.savefig(save_path)
-
-    if return_fig: return(fig)
-
-##_________________________________________________________________________##
-
-
-def plot_cumspend_line(start_m=None, n_pers=None, 
-                        policy=None, projs=None, annualise=True, net_spend=False, plot_pers=None,
-                        fig=None, ax=None, figsize=None, return_fig=False, save_path=None):
-    '''Plots a  line graph of the cumulated spend corresponding to the spendlines in a policy
-
-    Can either generate a new plot, or add to existing axis (in which case pass ax)
-
-    Can either generate projections and index from the policy, or use existing if passed
-    '''
-
-    # get projections from policy if not passed
-    if projs is None: 
-        projs = project_policy(policy, start_m, n_pers, net_spend=net_spend)
-
-    if annualise: projs *= 12
-
-    if plot_pers is not None:
-        projs = projs.iloc[:plot_pers,:]
-
-    ind = projs.index.to_timestamp()
-
-    # create fig and ax, unless passed (which they will be if plotting in existing grid)
-    if fig is None and ax is None:
-        fig, ax = plt.subplots(figsize=figsize)
-    
-    for i, p in enumerate(projs):
-        if i==0: 
-            ax.plot(ind, projs[p].values, color='black') 
-        else:
-            ax.plot(ind, projs[p].values, alpha=0.75)  
-
-    for t in ax.get_xticklabels():
-        t.set_rotation(45)
-
-    ax.legend(['1', '2'])
-    ax.set_yticklabels(['{:,}'.format(int(x)) for x in ax.get_yticks().tolist()])
-
-    title_str = ""
-    if net_spend: title_str = " net"
-   
-    ax.set_title("Accumulated{} spend".format(title_str))
-    ax.legend(projs.columns)  
-
-    if save_path is not None:
-        fig.savefig(save_path)
-
-    if return_fig: return(fig)
 
 ###_________________________________________________________________________##
 
@@ -797,7 +680,7 @@ def plot_shapes_line(policy, annualise=True, fig=None, ax=None, figsize=None, re
 ##_________________________________________________________________________##
 
 
-def project_policy(policy, start_m='1-2019', n_pers=120, 
+def project_policy(policy, start_m='1-2019', n_pers=120, shapes=None,
                     synch_start=True, diffs_out=False, annual=False, net_spend=True,
                     nans_to_zero=True, multi_index=True, _debug=False):  
     '''For a list of spendlines (with a start month and number of periods),
@@ -829,16 +712,22 @@ def project_policy(policy, start_m='1-2019', n_pers=120,
     n_pers     : number of periods to project.  Normally months
     
     '''
-    
+    pad = 25
+    if _debug: print("\nIN FUNCTION:  ".ljust(20), inspect.stack()[0][3])
+    if _debug: print("..called by:  ".ljust(20), inspect.stack()[1][3], end="\n\n")
+
     out = pd.DataFrame()
 
     policy = flatten(policy, _debug=_debug)
+    if _debug: print('flattened keys'.ljust(pad), policy.keys())
 
     # need to work out the max overhang.  NB this is also done in make_shapes1
     max_hang = None
     for x in policy: 
-        if _debug: print(x)
+        if _debug: print("in scenario".ljust(pad), x)
         max_hang = min([policy[x].launch_delay for x in policy])
+        if _debug: print("max hang is".ljust(pad), max_hang)
+
 
     # get the shapes - keys will be same as col heads
     # NB MUST PASS NET SPEND FLAG.  The policy carries the sav rates
@@ -846,16 +735,21 @@ def project_policy(policy, start_m='1-2019', n_pers=120,
                         flat=True, multi_index=False, synch_start=synch_start, _debug=_debug)
     if _debug: print('shapes returned:\n', shapes.head())
 
+    # work out new time frame, given any extension for negative launch delay
+    len_reqd = n_pers - max_hang
+    if _debug: print('new timeframe'.ljust(pad), len_reqd)
+
     # can now iterate through shapes, and cross ref the spendline
     for s in policy:
-        if _debug: print('column: ', s)
-        out[s] = pf.get_forecast1(shapes[s], policy[s].terminal_gr,
-                                             policy[s].cohort_gr, 
-                                             n_pers)[:n_pers - max_hang]
+        if _debug: print('column: '.ljust(pad), s)
+        out[s] = pf.get_forecast1(shapes[s], policy[s].term_gr,
+                                             policy[s].coh_gr, 
+                                             n_pers=len_reqd)
 
+    if _debug: print('length returned'.ljust(pad), len(out))
 
-    ind = pd.PeriodIndex(start=start_m, freq='M', periods=n_pers - max_hang)
-    if _debug: print('returned projection length: ', n_pers - max_hang)
+    # the index may be longer than the n pers, because of any overhangs erc
+    ind = pd.PeriodIndex(start=start_m, freq='M', periods=len(out.index))
     out.index = ind
 
     if multi_index: out.columns=pd.MultiIndex.from_tuples(out.columns)
@@ -871,7 +765,20 @@ def project_policy(policy, start_m='1-2019', n_pers=120,
     return out
 
 
+##_________________________________________________________________________##
 
+
+def projection(shapes, start_m='1-2019', n_pers=120, synch_start=True, _debug=False):
+    '''Revised function to get projections requiring an input shapes df
+    '''
+    pad = 25
+    if _debug: print("\nIN FUNCTION:  ".ljust(20), inspect.stack()[0][3])
+    if _debug: print("..called by:  ".ljust(20), inspect.stack()[1][3], end="\n\n")
+
+    out = pd.DataFrame()
+
+    for s in shapes:
+        pf.get_forecast1()
 
 ##_________________________________________________________________________##
 
@@ -896,31 +803,47 @@ class SpendLine():
 
     CONSTRUCTOR ARGUMENTS
 
-    name            : the name of the spendline 
+    name            : the name of the spendline [REQD]
 
-    shed            : namedtuple describing the lifecycle profile
+    shed            : namedtuple describing the lifecycle profile [REQD]
      .shed_name      : the name of the shed profile
      .uptake_dur     : duration of (linear) uptake period
      .plat_dur       : duration of (flat) plateau
      .gen_mult       : impact of patent expiry (multiplier, eg 0.2)
     
-    terminal_gr     : the rate of growth to be applied (indefinitely) 
-                    : after the drop on patent expiry
+    term_gr         : the rate of growth to be applied (indefinitely) 
+                    :  after the drop on patent expiry
 
     launch_delay    : negative if launch brought fwd
-    cohort_gr       : cohort growth rate
-    peak_sales_pm   : peak sales to which profile is normalised
-    sav_rate        : proportion of sales that substitute other drug spend
+    coh_gr          : cohort growth rate
+    peak_spend      : peak spend to which profile is normalised
+    icer            : the incremental cost-effectiveness ratio (£cost/QALY)
+    sav_rate        : proportion of spend that substitute other drug spend
+
+    log             : general dict for holding whatever
+
+    All time units are general - usually implied to be months.  
+    But no annualisation within this class except in the string.
 
     '''
-    def __init__(self, name, shed, terminal_gr=0, launch_delay=0, cohort_gr=0, peak_sales_pm=1, sav_rate=0):
+    def __init__(self, name, shed, 
+                       term_gr=0, launch_delay=0, coh_gr=0, 
+                       peak_spend=1, icer=None, sav_rate=0,
+                       log=None):
+
         self.name = name
         self.shed = shed
-        self.terminal_gr = terminal_gr
-        self.cohort_gr = cohort_gr
-        self.peak_sales_pm = peak_sales_pm
+        self.term_gr = term_gr
+        self.coh_gr = coh_gr
+        self.peak_spend = peak_spend
         self.launch_delay = launch_delay
+        self.icer = icer
         self.sav_rate = sav_rate
+
+        # create a general purpose dict for holding whatever
+        if log==None: 
+            self.log = {}
+        else: self.log = log
 
     
     def __str__(self):
@@ -928,17 +851,19 @@ class SpendLine():
         pad2 = 10
         return "\n".join([
             "SpendLine name:".ljust(pad1) + str(self.name).rjust(pad2),
-            "peak sales pm of monthly cohort:".ljust(pad1) + "{:0,.2f}".format(self.peak_sales_pm).rjust(pad2),
-            "peak sales pa of annual cohort:".ljust(pad1) + "{:0,.2f}".format(self.peak_sales_pm*12*12).rjust(pad2),
+            "peak spend pm of monthly cohort:".ljust(pad1) + "{:0,.2f}".format(self.peak_spend).rjust(pad2),
+            "peak spend pa of annual cohort:".ljust(pad1) + "{:0,.2f}".format(self.peak_spend*12*12).rjust(pad2),
+            "ICER, £/QALY:".ljust(pad1) + "{:0,.0f}".format(self.icer).rjust(pad2),
             "savings rate:".ljust(pad1) + "{:0,.1f}%".format(self.sav_rate*100).rjust(pad2),
             "shed:".ljust(pad1),
             "  - shed name:".ljust(pad1) + self.shed.shed_name.rjust(pad2),
             "  - uptake_dur:".ljust(pad1) + str(self.shed.uptake_dur).rjust(pad2),
             "  - plat_dur:".ljust(pad1) + str(self.shed.plat_dur).rjust(pad2),
             "  - gen_mult:".ljust(pad1) + str(self.shed.gen_mult).rjust(pad2),
-            "terminal_gr:".ljust(pad1) + str(self.terminal_gr).rjust(pad2),
+            "term_gr:".ljust(pad1) + str(self.term_gr).rjust(pad2),
             "launch_delay:".ljust(pad1) + str(self.launch_delay).rjust(pad2),
-            "cohort_gr:".ljust(pad1) + str(self.cohort_gr).rjust(pad2),
+            "coh_gr:".ljust(pad1) + str(self.coh_gr).rjust(pad2),
+            "log keys:".ljust(pad1) + ", ".join(self.log.keys()).rjust(pad2),
             "\n\n"
 
         ])
@@ -948,5 +873,5 @@ class SpendLine():
         return self.__str__()
 
     def get_shape(self):
-        return make_profile_shape(self.peak_sales_pm, self.shed)
+        return make_profile_shape(self.peak_spend, self.shed)
 

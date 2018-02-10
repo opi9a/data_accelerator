@@ -43,7 +43,7 @@ def plot_projs(rs_in, num_plots, out_path="", ma_interval=12):
     past_pad = len(joined_df.T) - len(past_df.T)
     fut_pad = len(joined_df.T) - len(fut_df.T)
     
-    # make the selection, ordering by max sales *ever* (not just in past)
+    # make the selection, ordering by max spend *ever* (not just in past)
     subset = fut_df.max(axis=1).sort_values(ascending=False).head(num_plots).index.get_level_values(level=0)
     past_df = past_df.loc[list(subset),:]
     fut_df = past_df.loc[list(subset),:]
@@ -51,13 +51,13 @@ def plot_projs(rs_in, num_plots, out_path="", ma_interval=12):
     fig, axs = plt.subplots(num_plots, 1, figsize=(10,5*num_plots))
     ind = joined_df.columns.to_timestamp()
 
-    # this is useful for efficiently getting max_sales
+    # this is useful for efficiently getting max_spend
     index_df = pd.DataFrame([*past_df.index], columns = past_df.index.names).set_index(keys='PxMolecule')
 
     for i,p in enumerate(subset):
 
-        max_sales = index_df.loc[p,'max_sales']
-        uptake_out = rf.infer_launch(past_df.loc[p].values, max_sales, return_dict=True, _debug=False, **il_args)
+        max_spend = index_df.loc[p,'max_spend']
+        uptake_out = rf.infer_launch(past_df.loc[p].values, max_spend, return_dict=True, _debug=False, **il_args)
 
         # basic plot of joined (i.e. past plus future)
         axs[i].plot(ind, joined_df.loc[p].T, label = 'actual and future spend')
@@ -236,7 +236,7 @@ def get_ix_slice(df, in_dict):
 # Given input profile, timings etc, returns the spend on each cohort.  
 # It's a generator, intended to be consumed as `sum(spender(...))`.
 
-def spender(spend_per, profile, launch_pers, coh_growth, term_growth, _debug=False):
+def spender(spend_per, profile, launch_pers, coh_gr, term_gr, _debug=False):
     '''Generator function which iterates through all cohorts extant at spend_per,
     yielding spend adjusted for cohort growth and terminal change.  
     Designed to be consumed with sum(self._spender(spend_per)).
@@ -274,7 +274,7 @@ def spender(spend_per, profile, launch_pers, coh_growth, term_growth, _debug=Fal
         # So the first will correspond to the last launch period (minus 1 to make start at zero).  
         # Then iterate through with the index
         coh_id = last_coh - i
-        coh_adj = (1+coh_growth)**coh_id # used to adjust for growth between cohorts
+        coh_adj = (1+coh_gr)**coh_id # used to adjust for growth between cohorts
         term_adj = 1 # will be used to adjust for change after period - set to 1 initially
         
         if _debug: print(str(prof_point).rjust(pads[0]+1), "|", 
@@ -289,7 +289,7 @@ def spender(spend_per, profile, launch_pers, coh_growth, term_growth, _debug=Fal
         # If the period is beyond the profile, use the terminal value
         else:
             # adjust the terminal value by the cohort growth, then for change after terminal period
-            term_adj = (1+term_growth)**(prof_point - prof_len+1)
+            term_adj = (1+term_gr)**(prof_point - prof_len+1)
             val = term_value * coh_adj * term_adj
 
         if _debug: 
@@ -310,7 +310,7 @@ def spender(spend_per, profile, launch_pers, coh_growth, term_growth, _debug=Fal
 ###_________________________________________________________________________###
 
         
-def get_forecast(profile, l_start, l_stop, coh_growth, term_growth, scale=1, 
+def get_forecast(profile, l_start, l_stop, coh_gr, term_gr, scale=1, 
                  proj_start=None, proj_stop=None, name='s_pd', 
                  output=None, _debug=False):
     ''' Arguments: 
@@ -346,8 +346,8 @@ def get_forecast(profile, l_start, l_stop, coh_growth, term_growth, scale=1,
          "Profile max value (scaled)": max(profile),
          "Profile max period": profile.argmax(axis=0),
          "Terminal value": profile[-1],
-         "Cohort growth rate": coh_growth,
-         "Terminal growth rate": term_growth,
+         "Cohort growth rate": coh_gr,
+         "Terminal growth rate": term_gr,
          "Projection start period": proj_start,
          "Projection end period": proj_stop,
          "Number of periods": plot_range}
@@ -364,7 +364,7 @@ def get_forecast(profile, l_start, l_stop, coh_growth, term_growth, scale=1,
     for i, per in enumerate(range(proj_start-l_start, proj_stop-l_start)):
         # if _debug: print("\nGetting period ", per)
         np_out[i] = sum(spender(per, profile, launch_pers, 
-                                coh_growth, term_growth, _debug=False))
+                                coh_gr, term_gr, _debug=False))
         # if _debug: print("--> Period ", per, "result: ", np_out[i])
 
     if output == 'arr':
@@ -374,7 +374,7 @@ def get_forecast(profile, l_start, l_stop, coh_growth, term_growth, scale=1,
 
 ###_________________________________________________________________________###
 
-def get_forecast1(shape, term_gr, coh_gr, n_pers, 
+def get_forecast1(shape, term_gr, coh_gr, n_pers=120, 
                   l_stop=None, name=None, _debug=False):
     '''Simpler version of get_forecast().  Not yet migrated to this though.
     TODO enable launch phases, eg only periods 0 to 10, (or starting after 0), 
@@ -392,10 +392,12 @@ def get_forecast1(shape, term_gr, coh_gr, n_pers,
     '''
 
     # make starting array - the shape, extended for the number of periods
-    terminal_per = (1 + term_gr) ** np.arange(1,n_pers - len(shape) +1) * shape.iat[-1]
+    # note this is snipped off at n_pers, which may mean never reach terminal
+
+    term_per = (1 + term_gr) ** np.arange(1,n_pers - len(shape) +1) * shape.iat[-1]
     if _debug: print('gf1 shape ', shape.values)
-    if _debug: print('gf1 terminal_per ', terminal_per)
-    base_arr = np.concatenate([shape, terminal_per]) 
+    if _debug: print('gf1 term_per ', term_per)
+    base_arr = np.concatenate([shape, term_per])[:n_pers]
     if _debug: print('gf1 base_arr ', base_arr)
 
     # instantiate an array to build on, adding layers (copy of base_arr)
@@ -437,8 +439,8 @@ def get_forecast1(shape, term_gr, coh_gr, n_pers,
 
 ###_________________________________________________________________________###
 
-def find_launch(sales, *, threshold, zero_first=True):
-    '''Taking a list as input, plus threshold percentage of max sales,
+def find_launch(spend, *, threshold, zero_first=True):
+    '''Taking a list as input, plus threshold percentage of max spend,
     returns the index of the first element to exceed that threshold.
     
     If not found returns "no data"
@@ -449,14 +451,14 @@ def find_launch(sales, *, threshold, zero_first=True):
     '''
     launch = 0
     
-    max_sales = sales.max()  
-    sales_threshold = threshold * max_sales
+    max_spend = spend.max()  
+    spend_threshold = threshold * max_spend
     
     try:
-        for i, val in enumerate(sales):
-            if i == 0 and val > sales_threshold:
+        for i, val in enumerate(spend):
+            if i == 0 and val > spend_threshold:
                 break
-            elif i > 0 and val > sales_threshold:
+            elif i > 0 and val > spend_threshold:
                 launch = i
                 break
     except:
