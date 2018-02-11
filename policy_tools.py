@@ -54,14 +54,16 @@ def dump_to_xls(res_df, outfile, in_dict=None, shapes=None, log=False, _debug=Fa
     shapes_body = make_shapes1(in_dict, flat=True, multi_index=True)
 
     if _debug: print('\ngot header and shapes from in_dict:\n')
-    if _debug: print(params_header, end="\n\n")
-    if _debug: print(shapes_body.head(), end="\n")
+    if _debug: print("params_header\n", params_header, end="\n\n")
+    if _debug: print("shapes_body\n", shapes_body.head(), end="\n")
 
 
     # if shapes are passed
     if shapes is not None:
+        if _debug: print('preparing to overwrite shapes')
         shapes_body = shapes
-        if _debug: print('writing passed shapes')
+        if _debug: print("new shapes_body\n", shapes_body.head(), end="\n")
+
 
     # assemble outputs
     shapes_out = params_header.append(shapes_body)
@@ -248,7 +250,7 @@ def make_params_table(pol_dict, index=None, log=False, _debug=False):
 
     if index is None:
         index = """peak_spend_pa peak_spend icer sav_rate 
-                    uptake_dur plat_dur gen_mult launch_delay
+                    uptake_dur plat_dur gen_mult launch_delay launch_stop
                     term_gr_pa term_gr_pm coh_gr_pa coh_gr_pm""".split()
 
     df = pd.DataFrame(index=index)
@@ -265,6 +267,7 @@ def make_params_table(pol_dict, index=None, log=False, _debug=False):
                  int(flat_dict[q].shed.plat_dur),
                  flat_dict[q].shed.gen_mult,
                  flat_dict[q].launch_delay,
+                 flat_dict[q].launch_stop,
 
                  flat_dict[q].term_gr*12,
                  flat_dict[q].term_gr,
@@ -389,16 +392,30 @@ def make_shape1(spendline=None, shed=None, z_pad=0, peak_spend=1, annualised=Fal
     Optionally return a pandas series or numpy array
     '''
     
-    if _debug: print("\nIN MAKE_SHAPE1")
+    if _debug: print("\nIN FUNCTION:  ".ljust(20), inspect.stack()[0][3])
+    if _debug: print("..called by:  ".ljust(20), inspect.stack()[1][3], end="\n\n")
 
-    pad = 10
+    pad = 25
+
+    ann_factor = 1
+    if annualised:
+        ann_factor = 144
+        if_debug: print('annualising')
+    elif _debug: print('not annualising')
+
 
     if spendline is not None:
+        if _debug: print('using a passed spendline\n')
         shed = spendline.shed
         peak_spend = spendline.peak_spend
         sav_rate = spendline.sav_rate
         term_gr = spendline.term_gr
         z_pad = spendline.launch_delay
+
+    elif shed is not None:
+        if _debug: print('using a passed shed\n')
+
+    else: print('need a spendline or a shed'); return 1
 
     zeros = np.zeros(z_pad)
     uptake = np.arange(1, shed.uptake_dur+1)
@@ -409,26 +426,41 @@ def make_shape1(spendline=None, shed=None, z_pad=0, peak_spend=1, annualised=Fal
 
     if _debug:
         print('shed: '.ljust(pad), shed)
-        print('zpad: '.ljust(pad), z_pad)
-        print('zeros: '.ljust(pad), zeros)
-        print('uptake: '.ljust(pad), uptake)
-        print('plat: '.ljust(pad), plat)
-        print('term: '.ljust(pad), term)
+        print('zpad passed: '.ljust(pad), z_pad)
+        print('zeros arr: '.ljust(pad), zeros)
+        print('uptake arr: '.ljust(pad), uptake)
+        print('plat arr: '.ljust(pad), plat)
+        print('term arr: '.ljust(pad), term)
         print('net spend: '.ljust(pad), net_spend)
         print('sav_rate: '.ljust(pad), sav_rate)
-        print('base: '.ljust(pad), base)
+        print('\n-->base arr: '.ljust(pad))
+        print(base, "\n")
 
 
     base = np.concatenate([zeros, uptake, plat, term])
 
-    if not net_spend: sav_rate=0
+    if not net_spend: 
+        sav_rate=0
+        if _debug: print('not netting, so rate is'.ljust(pad), sav_rate)
+
+    else: 
+        if _debug: print('netting, rate is'.ljust(pad), sav_rate)
     
-    base *= peak_spend * (1-sav_rate) / shed.uptake_dur
+    # do all the scaling.  Remembert uptake_dur is peak, due to the way
+    # base assembled with np.arange for the uptake period
+    scaling_factor = peak_spend * ann_factor * (1-sav_rate) / shed.uptake_dur
+
+    base *= scaling_factor
     
+    if _debug: 
+        print('\nscaling factor'.ljust(pad), "\n", scaling_factor)
+        print('\nbase after scaling'.ljust(pad), "\n", base)
+  
     if ser_out:
         base = pd.Series(base, name=name)   
 
-    if annualised: base *=12*12     
+    if _debug: print("\nLEAVING FUNCTION:  ".ljust(20), inspect.stack()[0][3])
+    if _debug: print("..returning to:  ".ljust(20), inspect.stack()[1][3], end="\n\n")
 
     return base
 
@@ -449,35 +481,35 @@ def make_shapes1(scens, term_dur=0, start_m=None, flat=True, synch_start=False,
     if _debug: print("\nIN FUNCTION:  ".ljust(20), inspect.stack()[0][3])
     if _debug: print("..called by:  ".ljust(20), inspect.stack()[1][3], end="\n\n")
 
-    if flat: scens = flatten(scens, _debug=_debug)
+    if flat: scens = flatten(scens, _debug=False)
 
-    pads = [15] + [8]*4
+    pads = [25] + [8]*4
     out = pd.DataFrame()
 
     # work out the global dimensions: maximum overhang beyond zero, and max length of shed
-    for x in scens: 
-        if _debug: print(x)
-        max_hang = min([scens[x].launch_delay for x in scens])
-        max_len = max([(scens[x].shed.uptake_dur + scens[x].shed.plat_dur)  for x in scens])
-    
-    if _debug: print("line".ljust(pads[0]), 
-                      "shed_len".rjust(pads[1]), 
-                      "zpad".rjust(pads[2]), 
-                      "t pad".rjust(pads[3]),
-                      "total".rjust(pads[4]))
-           
+    # for x in scens: 
+    # if _debug: print("in line".ljust(pad), x)
+    max_hang = min([scens[x].launch_delay for x in scens])
+    max_len = max([(scens[x].shed.uptake_dur + scens[x].shed.plat_dur)  for x in scens])
+    if _debug: print("max hang".ljust(pad), max_hang)
+    if _debug: print("max len".ljust(pad), max_len)
+
     # use the global dimensions to construct consistent dimensions for each shape
     for x in scens:
+        if _debug: print('launch_delay'.ljust(pads[0]), scens[x].launch_delay)
         shed_len = scens[x].shed.uptake_dur + scens[x].shed.plat_dur 
         z_pad = scens[x].launch_delay - max_hang
         term_pad = max_len + term_dur - scens[x].launch_delay - shed_len
         total = z_pad + shed_len + term_pad
         
-        if _debug: print(str(x).ljust(pads[0]), 
-                          str(shed_len).rjust(pads[1]), 
-                          str(z_pad).rjust(pads[2]), 
-                          str(term_pad).rjust(pads[3]),
-                          str(total).rjust(pads[4]))
+        if _debug: 
+            print('line'.ljust(pad), x)
+            print('shed_len'.ljust(pad), shed_len)
+            print('l_delay'.ljust(pad), scens[x].launch_delay)
+            print('z_pad'.ljust(pad), z_pad)
+            print('term_pad'.ljust(pad), term_pad)
+            print('total'.ljust(pad), total)
+
         
         out[x] = make_shape1(shed = scens[x].shed, 
                                z_pad = z_pad, 
@@ -496,8 +528,11 @@ def make_shapes1(scens, term_dur=0, start_m=None, flat=True, synch_start=False,
         
         out.index = pd.PeriodIndex(freq='M', start = pd.Period(start_m, freq='M'), periods=total)   
 
-    if multi_index: out.columns = pd.MultiIndex.from_tuples(out.columns)         
-            
+    if multi_index: out.columns = pd.MultiIndex.from_tuples(out.columns)     
+
+    if _debug: print("\LEAVING FUNCTION:  ".ljust(20), inspect.stack()[0][3])
+    if _debug: print("..returning to:  ".ljust(20), inspect.stack()[1][3], end="\n\n")      
+
     return out
 
 
@@ -582,68 +617,6 @@ def plot_diffs_ann_bar(start_m, n_pers, max_yrs=5,
 ##_________________________________________________________________________##
 
 
-def plot_impact_grid3(policy, start_m, n_pers, projs=None, diffs=None, max_bar_yrs=5, plot_pers=None, net_spend=False,
-                        save_path=None, plot_bar=True, return_fig=False,
-                        table=False):
-    '''Plots a grid of charts.
-
-    Going to change this to use individual plotting functions 
-    for each chart commonly needed, so can then choose whatever grid layout
-    '''
-    
-    if projs is None: projs = project_policy(policy, start_m, n_pers, net_spend=net_spend)
-    ind = projs.index.to_timestamp()
-    if diffs is None: diffs = projs.iloc[:,1:].subtract(projs.iloc[:,0], axis=0)    
-
-# plot all shapes and cumulated projections
-# for diffs, calc vs first columnb
-    
-    annual_projs = projs.groupby(projs.index.year).sum()
-    annual_diffs = diffs.groupby(diffs.index.year).sum()
-
-    tab_rows = 2
-    if plot_bar:
-        tab_rows +=1
-        if table:
-            tab_rows +=1
-
-    fig = plt.figure(figsize=(12,tab_rows*5))
-    rcParams['axes.titlepad'] = 12
-
-    ax0 = plt.subplot2grid((tab_rows,2), (0, 0))
-    plot_shapes_line(policy, annualise=True, ax=ax0)
-
-    ax1 = plt.subplot2grid((tab_rows,2), (0, 1))
-    plot_cumspend_line(start_m=start_m, n_pers=n_pers, annualise=True, plot_pers=plot_pers, policy=policy, net_spend=net_spend, ax=ax1)
-
-    if plot_bar:
-        ax2 = plt.subplot2grid((tab_rows,2), (1, 0), colspan=2)
-        plot_diffs_ann_bar(start_m=start_m, n_pers=n_pers, ax=ax2, projs=projs, diffs=diffs, 
-                    table=True, max_yrs=max_bar_yrs, net_spend=net_spend)
-
-    # if table:
-    #     tab = plt.subplot2grid((tab_rows,2), (2, 0), colspan=2)
-    #     tab.set_frame_on(False)
-    #     tab.set_xticks([])
-    #     tab.set_yticks([])
-
-    #     rowvals = ["{:0,.0f}".format(x) for x in annual_diffs.iloc[:,0].values]
-    #     the_table = tab.table(cellText=[rowvals], rowLabels=['spend, £m'],
-    #                         loc='top')
-    #     the_table.auto_set_font_size(False)
-    #     the_table.set_fontsize(10)
-
-    # fig.text(0.13,0.8,'here is text')
-
-    fig.subplots_adjust(hspace=0.4, wspace=0.3)
-
-    if save_path is not None:
-        fig.savefig(save_path)
-
-    if return_fig:
-        return fig
-
-##_________________________________________________________________________##
 
 
 def plot_shapes_line(policy, annualise=True, fig=None, ax=None, figsize=None, return_fig=False, save_path=None):
@@ -681,7 +654,7 @@ def plot_shapes_line(policy, annualise=True, fig=None, ax=None, figsize=None, re
 
 
 def project_policy(policy, start_m='1-2019', n_pers=120, shapes=None,
-                    synch_start=True, diffs_out=False, annual=False, net_spend=True,
+                    synch_start=False, diffs_out=False, annual=False, net_spend=True,
                     nans_to_zero=True, multi_index=True, _debug=False):  
     '''For a list of spendlines (with a start month and number of periods),
     returns a df with projections.
@@ -722,11 +695,8 @@ def project_policy(policy, start_m='1-2019', n_pers=120, shapes=None,
     if _debug: print('flattened keys'.ljust(pad), policy.keys())
 
     # need to work out the max overhang.  NB this is also done in make_shapes1
-    max_hang = None
-    for x in policy: 
-        if _debug: print("in scenario".ljust(pad), x)
-        max_hang = min([policy[x].launch_delay for x in policy])
-        if _debug: print("max hang is".ljust(pad), max_hang)
+    max_hang = min([policy[x].launch_delay for x in policy])
+    if _debug: print("max hang is".ljust(pad), max_hang)
 
 
     # get the shapes - keys will be same as col heads
@@ -736,15 +706,17 @@ def project_policy(policy, start_m='1-2019', n_pers=120, shapes=None,
     if _debug: print('shapes returned:\n', shapes.head())
 
     # work out new time frame, given any extension for negative launch delay
-    len_reqd = n_pers - max_hang
-    if _debug: print('new timeframe'.ljust(pad), len_reqd)
+    # len_reqd = n_pers - max_hang
+    # if _debug: print('new timeframe'.ljust(pad), len_reqd)
 
     # can now iterate through shapes, and cross ref the spendline
     for s in policy:
         if _debug: print('column: '.ljust(pad), s)
-        out[s] = pf.get_forecast1(shapes[s], policy[s].term_gr,
-                                             policy[s].coh_gr, 
-                                             n_pers=len_reqd)
+        out[s] = pf.get_forecast1(shapes[s], term_gr = policy[s].term_gr,
+                                             coh_gr = policy[s].coh_gr,  
+                                             l_stop = policy[s].launch_stop,
+                                             n_pers = n_pers, 
+                                             _debug=_debug)
 
     if _debug: print('length returned'.ljust(pad), len(out))
 
@@ -761,6 +733,9 @@ def project_policy(policy, start_m='1-2019', n_pers=120, shapes=None,
         out = out.groupby(out.index.year).sum()
 
     if nans_to_zero: out[out.isnull()] = 0
+
+    if _debug: print("\LEAVING FUNCTION:  ".ljust(20), inspect.stack()[0][3])
+    if _debug: print("..returning to:  ".ljust(20), inspect.stack()[1][3], end="\n\n")
 
     return out
 
@@ -827,7 +802,7 @@ class SpendLine():
 
     '''
     def __init__(self, name, shed, 
-                       term_gr=0, launch_delay=0, coh_gr=0, 
+                       term_gr=0, launch_delay=0, launch_stop=None, coh_gr=0, 
                        peak_spend=1, icer=None, sav_rate=0,
                        log=None):
 
@@ -837,6 +812,7 @@ class SpendLine():
         self.coh_gr = coh_gr
         self.peak_spend = peak_spend
         self.launch_delay = launch_delay
+        self.launch_stop = launch_stop
         self.icer = icer
         self.sav_rate = sav_rate
 
@@ -862,6 +838,7 @@ class SpendLine():
             "  - gen_mult:".ljust(pad1) + str(self.shed.gen_mult).rjust(pad2),
             "term_gr:".ljust(pad1) + str(self.term_gr).rjust(pad2),
             "launch_delay:".ljust(pad1) + str(self.launch_delay).rjust(pad2),
+            "launch_stop:".ljust(pad1) + str(self.launch_stop).rjust(pad2),
             "coh_gr:".ljust(pad1) + str(self.coh_gr).rjust(pad2),
             "log keys:".ljust(pad1) + ", ".join(self.log.keys()).rjust(pad2),
             "\n\n"

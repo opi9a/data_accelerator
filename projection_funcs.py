@@ -10,7 +10,7 @@ import numpy as np
 from matplotlib import pyplot as plt
 import os
 import r_funcs as rf
-
+import inspect
 
 
 
@@ -393,12 +393,19 @@ def get_forecast1(shape, term_gr, coh_gr, n_pers=120,
 
     # make starting array - the shape, extended for the number of periods
     # note this is snipped off at n_pers, which may mean never reach terminal
+    if _debug: print("\nIN FUNCTION:  ".ljust(20), inspect.stack()[0][3])
+    if _debug: print("..called by:  ".ljust(20), inspect.stack()[1][3], end="\n\n")
+
+    pad = 20
+
+    if _debug: print("processing shape".ljust(pad), shape.name)
 
     term_per = (1 + term_gr) ** np.arange(1,n_pers - len(shape) +1) * shape.iat[-1]
-    if _debug: print('gf1 shape ', shape.values)
-    if _debug: print('gf1 term_per ', term_per)
+    if _debug: print('Input shape\n', shape[:24])
+    if _debug: print('Term_per ', term_per)
     base_arr = np.concatenate([shape, term_per])[:n_pers]
-    if _debug: print('gf1 base_arr ', base_arr)
+    if _debug: print('Base_arr\n', base_arr[:24])
+
 
     # instantiate an array to build on, adding layers (copy of base_arr)
     res = base_arr.copy()
@@ -411,7 +418,7 @@ def get_forecast1(shape, term_gr, coh_gr, n_pers=120,
     
     if l_stop is not None:
         l_pers = min(l_stop, n_pers)
-        if _debug: print('curtailing launches at')
+        if _debug: print('curtailing launches at', l_pers)
     else:
         l_pers = n_pers
         if _debug: print('launches for full interval')

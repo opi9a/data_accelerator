@@ -21,9 +21,7 @@ def bigplot(scens, res_df, shapes_df, name=None, _debug=False):
     if shapes_df is None:
         shapes_df = pt.make_shapes1(scens, flat=True, multi_index=True).sort_index(axis=1)
 
-    # annualise the shapes
-    shapes_df *= 144
-    
+ 
 
     # MAKE A TABLE WITH PARAMETERS & SUMMARY
     params_table1 = pt.make_params_table(scens).append(res_df.groupby(res_df.index.year).sum().iloc[:5,:])
@@ -32,23 +30,47 @@ def bigplot(scens, res_df, shapes_df, name=None, _debug=False):
 
     fig = plt.figure(figsize=(10,10), dpi=200)
     legend = list(shapes_df.columns.levels[0])
-    max_y = shapes_df.max().max()*1.1
+    max_y = shapes_df.max().max()*1.1*144
 
-   
-    for i, line in enumerate(shapes_df.columns.levels[1]): 
+    pad = 25
+
+    if _debug: print('columns to plot are'.ljust(pad), shapes_df.columns)   
+
+    # get only lines we want
+    right_lines = [x for x in shapes_df.columns.levels[1] if '_init' not in x]
+    if _debug: print("right_lines".ljust(pad), right_lines)
+
+    # get the df sorted etc
+    sorted_df = shapes_df.sort_index(axis=1)
+
+    for i, line in enumerate(right_lines): 
         # this is the crucial operation which reorganises the df across scenarios
         # eg grouping together EoL spendlines across baseline, option1, option2
-        sub_df = shapes_df.xs(line, level=1, axis=1)
-        if _debug: print('sub_df', sub_df.head())
+        # NB annualising here
+        if _debug: print("\n" + "+"*10 + "\nLINE is".ljust(pad), line)
+        if _debug: print("index is".ljust(pad), i)
+        sub_df = sorted_df.xs(line, level=1, axis=1) *144
+
+        if '_init' in line: 
+            if _debug: print('exiting as contains init')
+            break
+
+        if _debug: print('sub_df'); print(sub_df.head(), "\n")
         # make the plot
         ax = plt.subplot2grid((3, 3),(0,i))
 #         ax = plt.subplot2grid((4, 4),(3,i), rowspan=0)
         for j in sub_df.columns:
-            # remember these are now double-annualised
+            if _debug: print('\nnow in sub_df col'.ljust(pad), j)
+
+
+            #  these are now double-annualised
             if j == 'baseline': # treat the baseline separately
+                if _debug: print('plotting dfcol (base)'.ljust(pad), j)
+                if _debug: print('data'); print(sub_df[j].head())
                 ax.plot(sub_df.index/12, sub_df[j], color='black')
             else:
-                if _debug: print('plotting non baseline')
+                if _debug: print('plotting dfcol (not base)'.ljust(pad), j)
+                if _debug: print('data'); print(sub_df[j].head())
                 ax.plot(sub_df.index/12, sub_df[j], alpha=0.75)
 
         ax.set_title(line + " cohorts")
@@ -59,7 +81,6 @@ def bigplot(scens, res_df, shapes_df, name=None, _debug=False):
     #     if i == 0: ax.legend([p for p in pols])
             ax.set_ylabel('£m, annualised')
         else: ax.yaxis.set_tick_params(label1On=False)
-    print(res_df.head())
 
     # SECOND ROW: cumulative spend
     ax = plt.subplot2grid((3, 3),(1,0), colspan=2)
@@ -67,8 +88,7 @@ def bigplot(scens, res_df, shapes_df, name=None, _debug=False):
     plot_cumspend_line(res_df, plot_pers=60, annualise=True, ax=ax) # annualise
     ax.set_title('Annualised net spend on future launches')
     ax.legend(legend)
-    ax.set_ylabel('£m annualised')
-    print(res_df.head())
+    ax.set_ylabel('£m, annualised')
 
     # THIRD ROW: annual diffs
     # get data grouped by scenario (aggregating over spendlines)
@@ -207,3 +227,69 @@ def plot_cumspend_line(res_df, annualise=True, net_spend=False, plot_pers=None,
         fig.savefig(save_path)
 
     if return_fig: return(fig)
+
+##_________________________________________________________________________##
+
+
+def plot_impact_grid3(policy, start_m, n_pers, projs=None, diffs=None, max_bar_yrs=5, plot_pers=None, net_spend=False,
+                        save_path=None, plot_bar=True, return_fig=False,
+                        table=False):
+    '''Plots a grid of charts.
+
+    Going to change this to use individual plotting functions 
+    for each chart commonly needed, so can then choose whatever grid layout
+    '''
+    
+    if projs is None: projs = project_policy(policy, start_m, n_pers, net_spend=net_spend)
+    ind = projs.index.to_timestamp()
+    if diffs is None: diffs = projs.iloc[:,1:].subtract(projs.iloc[:,0], axis=0)    
+
+# plot all shapes and cumulated projections
+# for diffs, calc vs first columnb
+    
+    annual_projs = projs.groupby(projs.index.year).sum()
+    annual_diffs = diffs.groupby(diffs.index.year).sum()
+
+    tab_rows = 2
+    if plot_bar:
+        tab_rows +=1
+        if table:
+            tab_rows +=1
+
+    fig = plt.figure(figsize=(12,tab_rows*5))
+    rcParams['axes.titlepad'] = 12
+
+    ax0 = plt.subplot2grid((tab_rows,2), (0, 0))
+    plot_shapes_line(policy, annualise=True, ax=ax0)
+
+    ax1 = plt.subplot2grid((tab_rows,2), (0, 1))
+    plot_cumspend_line(start_m=start_m, n_pers=n_pers, annualise=True, plot_pers=plot_pers, policy=policy, net_spend=net_spend, ax=ax1)
+
+    if plot_bar:
+        ax2 = plt.subplot2grid((tab_rows,2), (1, 0), colspan=2)
+        plot_diffs_ann_bar(start_m=start_m, n_pers=n_pers, ax=ax2, projs=projs, diffs=diffs, 
+                    table=True, max_yrs=max_bar_yrs, net_spend=net_spend)
+
+    # if table:
+    #     tab = plt.subplot2grid((tab_rows,2), (2, 0), colspan=2)
+    #     tab.set_frame_on(False)
+    #     tab.set_xticks([])
+    #     tab.set_yticks([])
+
+    #     rowvals = ["{:0,.0f}".format(x) for x in annual_diffs.iloc[:,0].values]
+    #     the_table = tab.table(cellText=[rowvals], rowLabels=['spend, £m'],
+    #                         loc='top')
+    #     the_table.auto_set_font_size(False)
+    #     the_table.set_fontsize(10)
+
+    # fig.text(0.13,0.8,'here is text')
+
+    fig.subplots_adjust(hspace=0.4, wspace=0.3)
+
+    if save_path is not None:
+        fig.savefig(save_path)
+
+    if return_fig:
+        return fig
+
+##_________________________________________________________________________##
