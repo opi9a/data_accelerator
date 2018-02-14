@@ -6,6 +6,8 @@ from matplotlib import rcParams
 import matplotlib.ticker as ticker
 import projection_funcs as pf
 import policy_tools as pt
+import inspect
+from copy import deepcopy
 
 
 def bigplot(scens, res_df, shapes_df, name=None, _debug=False):
@@ -17,12 +19,13 @@ def bigplot(scens, res_df, shapes_df, name=None, _debug=False):
 
     Annual diffs vs first scenario
     '''
+    if _debug: print("\nIN FUNCTION:  ".ljust(20), inspect.stack()[0][3])
+    if _debug: print("..called by:  ".ljust(20), inspect.stack()[1][3], end="\n\n")
 
     if shapes_df is None:
         shapes_df = pt.make_shapes1(scens, flat=True, multi_index=True).sort_index(axis=1)
 
  
-
     # MAKE A TABLE WITH PARAMETERS & SUMMARY
     params_table1 = pt.make_params_table(scens).append(res_df.groupby(res_df.index.year).sum().iloc[:5,:])
     params_table1
@@ -83,16 +86,19 @@ def bigplot(scens, res_df, shapes_df, name=None, _debug=False):
         else: ax.yaxis.set_tick_params(label1On=False)
 
     # SECOND ROW: cumulative spend
+
+    
+
     ax = plt.subplot2grid((3, 3),(1,0), colspan=2)
 #     ax = plt.subplot2grid((4, 4),(0,2), rowspan=2, colspan=2)
-    plot_cumspend_line(res_df, plot_pers=60, annualise=True, ax=ax) # annualise
+    plot_cumspend_line(res_df, plot_pers=60, annualise=True, ax=ax, _debug=_debug) # annualise
     ax.set_title('Annualised net spend on future launches')
     ax.legend(legend)
     ax.set_ylabel('£m, annualised')
 
     # THIRD ROW: annual diffs
     # get data grouped by scenario (aggregating over spendlines)
-    data = res_df.groupby(axis=1, level=0).sum()
+    data = deepcopy(res_df.groupby(axis=1, level=0).sum())
     ax = plt.subplot2grid((3, 3),(2,0), colspan=2)
 #     ax = plt.subplot2grid((4, 4),(2,2), rowspan=3, colspan=2)
     plot_ann_diffs(data, ax=ax, net_spend=True, legend=legend[1:], table=True)
@@ -101,15 +107,78 @@ def bigplot(scens, res_df, shapes_df, name=None, _debug=False):
     if name is not None:
         fig.savefig('figs/' + name + '.png')
 
+##_________________________________________________________________________##
+
+
+def plot_cumspend_line(res_df, annualise=True, net_spend=False, plot_pers=None,
+                        fig=None, ax=None, figsize=None, return_fig=False, save_path=None, _debug=False):
+    '''Plots a  line graph of scenarios, summing across spendlines.
+
+    Input is a dataframe of results.  Will be summed for scenarios (level 0 of col multi-index)
+
+    Can either generate a new plot, or add to existing axis (in which case pass ax)
+
+    Can either generate projections and index from the policy, or use existing if passed
+
+    Limit time interval by specifying plot_pers
+    '''
+    if _debug: print("\nIN FUNCTION:  ".ljust(20), inspect.stack()[0][3])
+    if _debug: print("..called by:  ".ljust(20), inspect.stack()[1][3], end="\n\n")   
+
+    pad=20
+
+    # need to avoid actually changing res_df
+    ann_factor = 1
+    if annualise: ann_factor = 12
+
+    if plot_pers is None: plot_pers = len(res_df)
+    if _debug: print('plot pers'.ljust(pad), plot_pers)
+
+    ind = res_df.index.to_timestamp()[:plot_pers]
+
+    # sum for the scenarios - highest level of column multi-index
+    scen_lines = res_df.groupby(level=0, axis=1).sum().iloc[:plot_pers, :] * ann_factor
+    if _debug: print('scen_lines:\n', scen_lines.head())
+
+    # create fig and ax, unless passed (which they will be if plotting in existing grid)
+    if fig is None and ax is None:
+        fig, ax = plt.subplots(figsize=figsize)
+    
+    for i, p in enumerate(scen_lines):
+        if i==0: 
+            ax.plot(ind, scen_lines[p].values, color='black') 
+        else:
+            ax.plot(ind, scen_lines[p].values, alpha=0.75)  
+
+    for t in ax.get_xticklabels():
+        t.set_rotation(45)
+
+    ax.legend(scen_lines.columns)
+    ax.set_yticklabels(['{:,}'.format(int(x)) for x in ax.get_yticks().tolist()])
+
+    title_str = ""
+    if net_spend: title_str = " net"
+   
+    ax.set_title("Accumulated{} spend".format(title_str))
+
+    if save_path is not None:
+        fig.savefig(save_path)
+
+    if _debug: print("\nLEAVING FUNCTION:  ".ljust(20), inspect.stack()[0][3])
+    if _debug: print("..returning to:  ".ljust(20), inspect.stack()[1][3], end="\n\n")
+
+    if return_fig: return(fig)
 
 ##_________________________________________________________________________##
 
 
 def plot_ann_diffs(projs, max_yrs=5, fig=None, ax=None, figsize=None, 
-                    table=False, legend=None, net_spend=False, return_fig=False, save_path=None):
+                    table=False, legend=None, net_spend=False, return_fig=False, save_path=None, _debug=False):
     '''Plots a bar chart of annual data, subtracting the first column
     Can either generate a new plot, or add to existing axis (in which case pass ax)
     '''
+    if _debug: print("\nIN FUNCTION:  ".ljust(20), inspect.stack()[0][3])
+    if _debug: print("..called by:  ".ljust(20), inspect.stack()[1][3], end="\n\n")
 
     diffs = projs.iloc[:,1:].subtract(projs.iloc[:,0], axis=0)
     diffs = diffs.groupby(diffs.index.year).sum().iloc[:max_yrs,:]
@@ -170,63 +239,12 @@ def plot_ann_diffs(projs, max_yrs=5, fig=None, ax=None, figsize=None,
 
     if save_path is not None:
         fig.savefig(save_path)
-
-    if return_fig: return(fig)
-
-##_________________________________________________________________________##
-
-
-def plot_cumspend_line(res_df, annualise=True, net_spend=False, plot_pers=None,
-                        fig=None, ax=None, figsize=None, return_fig=False, save_path=None, _debug=False):
-    '''Plots a  line graph of scenarios, summing across spendlines.
-
-    Input is a dataframe of results.  Will be summed for scenarios (level 0 of col multi-index)
-
-    Can either generate a new plot, or add to existing axis (in which case pass ax)
-
-    Can either generate projections and index from the policy, or use existing if passed
-
-    Limit time interval by specifying plot_pers
-    '''
-    pad=20
-    # need to avoid actually changing res_df
-    ann_factor = 1
-    if annualise: ann_factor = 12
-
-    if plot_pers is None: plot_pers = len(res_df)
-    if _debug: print('plot pers'.ljust(pad), plot_pers)
-
-    ind = res_df.index.to_timestamp()[:plot_pers]
-
-    # sum for the scenarios - highest level of column multi-index
-    scen_lines = res_df.groupby(level=0, axis=1).sum().iloc[:plot_pers, :] * ann_factor
-    if _debug: print('scen_lines:\n', scen_lines.head())
-
-    # create fig and ax, unless passed (which they will be if plotting in existing grid)
-    if fig is None and ax is None:
-        fig, ax = plt.subplots(figsize=figsize)
     
-    for i, p in enumerate(scen_lines):
-        if i==0: 
-            ax.plot(ind, scen_lines[p].values, color='black') 
-        else:
-            ax.plot(ind, scen_lines[p].values, alpha=0.75)  
-
-    for t in ax.get_xticklabels():
-        t.set_rotation(45)
-
-    ax.legend(scen_lines.columns)
-    ax.set_yticklabels(['{:,}'.format(int(x)) for x in ax.get_yticks().tolist()])
-
-    title_str = ""
-    if net_spend: title_str = " net"
-   
-    ax.set_title("Accumulated{} spend".format(title_str))
-
-    if save_path is not None:
-        fig.savefig(save_path)
+    if _debug: print("\nLEAVING FUNCTION:  ".ljust(20), inspect.stack()[0][3])
+    if _debug: print("..returning to:  ".ljust(20), inspect.stack()[1][3], end="\n\n")
 
     if return_fig: return(fig)
+
 
 ##_________________________________________________________________________##
 

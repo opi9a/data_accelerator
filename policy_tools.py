@@ -395,7 +395,7 @@ def make_shape1(spendline=None, shed=None, z_pad=0, peak_spend=1, annualised=Fal
     if _debug: print("\nIN FUNCTION:  ".ljust(20), inspect.stack()[0][3])
     if _debug: print("..called by:  ".ljust(20), inspect.stack()[1][3], end="\n\n")
 
-    pad = 25
+    pad = 30
 
     ann_factor = 1
     if annualised:
@@ -404,16 +404,26 @@ def make_shape1(spendline=None, shed=None, z_pad=0, peak_spend=1, annualised=Fal
     elif _debug: print('not annualising')
 
 
+    if spendline is not None and shed is not None:
+        print('PASSED A SHED AND A SPENDLINE TO ', inspect.stack()[0][3])
+        print('using the shed')
+        spendline = None
+
     if spendline is not None:
-        if _debug: print('using a passed spendline\n')
+        if _debug: print('using a passed spendline.   Note will not synchronise for negative launch delays\n')
         shed = spendline.shed
         peak_spend = spendline.peak_spend
         sav_rate = spendline.sav_rate
         term_gr = spendline.term_gr
-        z_pad = spendline.launch_delay
+
+        if spendline.launch_delay < 0: 
+            print("Can't use negative launch delays - setting this to zero")
+            print("Pass a shed with z_pad appropriate to the set of spendlines if doing this for anything other than display\n")
+            z_pad = 0
+        else: z_pad = spendline.launch_delay
 
     elif shed is not None:
-        if _debug: print('using a passed shed\n')
+        if _debug: print('using a passed shed.\n')
 
     else: print('need a spendline or a shed'); return 1
 
@@ -444,16 +454,20 @@ def make_shape1(spendline=None, shed=None, z_pad=0, peak_spend=1, annualised=Fal
         if _debug: print('not netting, so rate is'.ljust(pad), sav_rate)
 
     else: 
-        if _debug: print('netting, rate is'.ljust(pad), sav_rate)
+        if _debug: print('netting, sav_rate is'.ljust(pad), sav_rate)
     
     # do all the scaling.  Remembert uptake_dur is peak, due to the way
     # base assembled with np.arange for the uptake period
     scaling_factor = peak_spend * ann_factor * (1-sav_rate) / shed.uptake_dur
 
     base *= scaling_factor
-    
+
     if _debug: 
-        print('\nscaling factor'.ljust(pad), "\n", scaling_factor)
+        print('\n1 - effective sav_rate'.ljust(pad), 1 - sav_rate)
+        print('\npeak_spend'.ljust(pad), peak_spend)
+        print('\nann_factor'.ljust(pad), ann_factor)
+        print('\nuptake_dur divisor'.ljust(pad), shed.uptake_dur)
+        print('\n-->scaling factor'.ljust(pad), scaling_factor)
         print('\nbase after scaling'.ljust(pad), "\n", base)
   
     if ser_out:

@@ -375,7 +375,7 @@ def get_forecast(profile, l_start, l_stop, coh_gr, term_gr, scale=1,
 ###_________________________________________________________________________###
 
 def get_forecast1(shape, term_gr, coh_gr, n_pers=120, 
-                  l_stop=None, name=None, _debug=False):
+                  l_stop=None, name=None, _debug=False, _logfile=None):
     '''Simpler version of get_forecast().  Not yet migrated to this though.
     TODO enable launch phases, eg only periods 0 to 10, (or starting after 0), 
     rather than limiting to continuous launching through whole projection period.
@@ -396,11 +396,35 @@ def get_forecast1(shape, term_gr, coh_gr, n_pers=120,
     if _debug: print("\nIN FUNCTION:  ".ljust(20), inspect.stack()[0][3])
     if _debug: print("..called by:  ".ljust(20), inspect.stack()[1][3], end="\n\n")
 
-    pad = 20
+    pad = 25
 
-    if _debug: print("processing shape".ljust(pad), shape.name)
+    if _debug: 
+        if isinstance(shape, np.ndarray):
+            print("processing np array shape, len".ljust(pad), len(shape))
 
-    term_per = (1 + term_gr) ** np.arange(1,n_pers - len(shape) +1) * shape.iat[-1]
+        elif isinstance(shape, pd.Series):
+            print("processing pd series shape, name".ljust(pad), shape.name)
+            print("..........................length".ljust(pad), len(shape))
+
+        else: print('processing something but not sure what')
+
+    # get last spend value.  Sometimes index [-1] doesn't work with series
+    last_val = None
+
+    try:
+        last_val = shape[-1]
+        if _debug: print('got last period using index -1')
+
+    except:
+        if _debug: print('could not get last period using index -1')
+
+        if isinstance(shape, pd.Series):
+            last_val = shape.iat[-1]
+        
+        else:
+            print("can't get a last period value")
+
+    term_per = (1 + term_gr) ** np.arange(1,n_pers - len(shape) +1) * last_val
     if _debug: print('Input shape\n', shape[:24])
     if _debug: print('Term_per ', term_per)
     base_arr = np.concatenate([shape, term_per])[:n_pers]
@@ -438,8 +462,9 @@ def get_forecast1(shape, term_gr, coh_gr, n_pers=120,
         df_out['dfsum'] = df_out.sum(axis=1)
         df_out['result'] = res
         df_out['diff'] = df_out['dfsum']  - df_out['result'] 
-        df_out.to_pickle('logs/temp.pkl')
         print('debug df info: ', df_out.info())
+        if _logfile is not None:
+            df_out.to_pickle(_logfile + '.pkl')
     
     return pd.Series(res, name=name)
 

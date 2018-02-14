@@ -26,6 +26,8 @@ class RuleSet:
                         : string_slice is in a format compatible with the web app, and
                         is translated to index_slice, which is actually used to slice the df,
                         by the slicify_string method
+                        : index_slice is a dict NOT AN ACTUAL INDEXSLICE!
+                        : TODO support passing an actual indexslice
 
         func_str, func  : define the projection function to be applied
                         : func_str is just the string for the function,

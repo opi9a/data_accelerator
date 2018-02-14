@@ -2,6 +2,7 @@
 import pandas as pd
 import numpy as np
 import projection_funcs as pf
+import policy_tools as pt
 from pprint import pprint
 
 profs_table={'prof1':'c:/Users/groberta/Work/data_accelerator/profiles/prof1.csv',
@@ -23,7 +24,7 @@ and passed appropriately to front end.
 '''
 ##_________________________________________________________________________##
 
-def infer_launch(in_arr, max_sales, streak_len_threshold=12, delta_threshold = 0.2, 
+def infer_launch(in_arr, max_spend, streak_len_threshold=12, delta_threshold = 0.2, 
                     _ma_interval=12, verbose_return=False, _debug=False):
 
     '''Infers a launch date, given a trajectory of spend, by identifying an uptake phase - 
@@ -33,9 +34,9 @@ def infer_launch(in_arr, max_sales, streak_len_threshold=12, delta_threshold = 0
     PARAMETERS:
 
         in_arr                  input array (numpy I think)
-        max_sales               the individual product's max sales value
+        max_spend               the individual product's max spend value
         streak_len_threshold    the number of periods of successive growth
-        delta_threshold         the change (proportionate to max sales) required for a streak to qualify
+        delta_threshold         the change (proportionate to max spend) required for a streak to qualify
         _ma_interval            interval for calculatino of moving averages
         verbose_return          [bool] return an object with info on all streaks, rather than the one detected
 
@@ -44,7 +45,7 @@ def infer_launch(in_arr, max_sales, streak_len_threshold=12, delta_threshold = 0
         dictionary with:
             uptake_detected:    [bool] if a qualifying streak was found
             start:              start of the detected qualifying streak
-            delta:              the increase over the uptake streak (proportion of max sales)
+            delta:              the increase over the uptake streak (proportion of max spend)
             inferred_launch:    expressed relative to period zero of in_arr
 
 
@@ -73,7 +74,7 @@ def infer_launch(in_arr, max_sales, streak_len_threshold=12, delta_threshold = 0
                 # calculate the delta, based on the mov ave
                 if _debug: print(', START: ', p-streak, ma[p-streak], end=" ")
                 if _debug: print(', END: ', p, ma[p], end=" ")
-                delta = (ma[p] - ma[p-streak]) / max_sales
+                delta = (ma[p] - ma[p-streak]) / max_spend
                 if _debug: print(', delta is, ', delta, end=" ")
                 
                 # only add to dict if is over threshold
@@ -132,34 +133,47 @@ def infer_launch(in_arr, max_sales, streak_len_threshold=12, delta_threshold = 0
 ##_________________________________________________________________________##
 
 def trend(prod, interval, *, launch_cat=None, life_cycle_per=0,
-          uptake_dur=120, plat_dur=24, gen_mult=0, term_rate_pa=0,
-          threshold_rate=0.001, n_pers=12, 
+          shed=None, uptake_dur=120, plat_dur=24, gen_mult=0, term_gr_pa=None,
+          term_gr = 0,  threshold_rate=0.001, n_pers=12, 
           _out_type='array', _debug=False, name=None):
 
     '''Takes input array, with parameters, and returns a trend-based projection.
 
     Parameters:
 
+        prod        An input array of spend
+
         interval    The number of periods (back from last observation) that are used
                     to calculate the trend
     '''
     
-    lpad, rpad = 50, 20
+    lpad, rpad = 20, 20
 
-    if name is not None:
-        if _debug: print('\n\nIn ',  name)
-    else: 
-        if _debug: print('\nNo name')
-    
+    if _debug: 
+        print('\nIn '.ljust(lpad),  name)
+        print('type'.ljust(lpad), type(prod))
+
     # make sure initial array is ok
-    try:
+    if isinstance(prod, pd.Series):
         prod = np.array(prod)
-        if _debug: print("made np array, len:".ljust(lpad), str(len(prod)).rjust(rpad))
-    except:
-        if _debug: print("could not make np array")
-        if _debug: print("prod type:".ljust(lpad), str(type(prod)).rjust(rpad))
-        if _debug: print("prod len:".ljust(lpad), str(len(prod)).rjust(rpad))
-            
+
+    elif not isinstance(prod, np.array):
+        print("DON'T KNOW WHAT HAS BEEN PASSED - make sure its not a dataframe")
+        return
+
+
+    if shed is not None:
+        if _debug: print('using passed shed:')
+        uptake_dur = shed.uptake_dur
+        plat_dur = shed.plat_dur
+        gen_mult = shed.gen_mult
+        if _debug: 
+            print(" - uptake_dur".ljust(lpad), uptake_dur)
+            print(" - plat_dur".ljust(lpad), plat_dur)
+            print(" - gen_mult".ljust(lpad), gen_mult)
+
+    if term_gr_pa is not None:
+        term_gr = term_gr_pa/12
 
     # make an annual moving average array
     prod[np.isnan(prod)]=0
@@ -180,22 +194,23 @@ def trend(prod, interval, *, launch_cat=None, life_cycle_per=0,
 
     else: i_dict['phase'] = 'terminal'
 
-    # get sales info
+    # get spend info
 
     i_dict['__s1'] = "spacer"
-    i_dict['max_sales'] = np.nanmax(prod)    
-    i_dict['max_sales_per'] = np.nanargmax(prod)
+    i_dict['max_spend'] = np.nanmax(prod)    
+    i_dict['max_spend_per'] = np.nanargmax(prod)
     i_dict['last_spend'] = (prod[-1])
 
     i_dict['__s2'] = "spacer"
-    i_dict['max_sales_ma'] = np.nanmax(prod_ma)    
-    i_dict['max_sales_ma_per'] = np.nanargmax(prod_ma)
+    i_dict['max_spend_ma'] = np.nanmax(prod_ma)    
+    i_dict['max_spend_ma_per'] = np.nanargmax(prod_ma)
     i_dict['last_spend_ma'] = (prod_ma[-1])
 
     # get drop from max 
     i_dict['__s3'] = "spacer"
-    i_dict['total_drop_ma'] = max(0, i_dict['max_sales_ma'] - i_dict['last_spend_ma'])
-    i_dict['total_drop_ma_pct'] = i_dict['total_drop_ma']/i_dict['max_sales_ma']
+    i_dict['total_drop_ma'] = max(0, i_dict['max_spend_ma'] - i_dict['last_spend_ma'])
+    if not i_dict['max_spend_ma'] == 0:
+        i_dict['total_drop_ma_pct'] = i_dict['total_drop_ma']/i_dict['max_spend_ma']
     
     # get linear change per period over interval of periods
     # TODO calculate this on recent averages
@@ -203,19 +218,20 @@ def trend(prod, interval, *, launch_cat=None, life_cycle_per=0,
     i_dict['interval'] = min(interval, len(prod))
     i_dict['interval_delta'] = prod[-1] - prod[-(1 + interval)]
     i_dict['interval_rate'] = i_dict['interval_delta'] / interval
-    i_dict['interval_rate_pct'] = i_dict['interval_rate'] / prod[-(1 + interval)]
+    if not prod[-(1 + interval)] == 0:
+        i_dict['interval_rate_pct'] = i_dict['interval_rate'] / prod[-(1 + interval)]
     i_dict['__endint'] = "spacer"
 
 
 
     # first sort out all the periods
 
-    out = np.array([i_dict['last_spend_ma']]) # this period overlaps with past
+    out = np.array([i_dict['last_spend_ma']]) # this period overlaps with past, will be snipped later
 
     if i_dict['phase'] == 'terminal':
         # simplifies, plus avoids applying gen_mult if already in terminal
         # different to 
-        out = out[-1] * ((1 + term_rate_pa/12) ** np.arange(1, n_pers+1))
+        out = out[-1] * ((1 + term_gr) ** np.arange(1, n_pers+1))
 
     else:
 
@@ -235,7 +251,7 @@ def trend(prod, interval, *, launch_cat=None, life_cycle_per=0,
         out = np.append(out, plat_out)
 
         i_dict['term_pers'] = max(n_pers - (len(out)-1), 0)
-        term_out = out[-1] * gen_mult * ((1 + term_rate_pa/12) ** np.arange(1, i_dict['term_pers']+1))
+        term_out = out[-1] * gen_mult * ((1 + term_gr) ** np.arange(1, i_dict['term_pers']+1))
 
         out = np.append(out, term_out)
 
@@ -271,34 +287,62 @@ def trend(prod, interval, *, launch_cat=None, life_cycle_per=0,
 
 ##_________________________________________________________________________##
 
-def r_trend(df, n_pers, *, uptake_dur=None, plat_dur=None, gen_mult=None, term_rate_pa=None,
+def r_trend(df, n_pers, *, shed=None, uptake_dur=None, plat_dur=None, gen_mult=None, term_gr=0, term_gr_pa=None,
           threshold_rate=0.001, _interval=24, _debug=False):
     
     '''iterates through an input df
     applies trend()
     returns 
     '''
+    pad = 20
     out=[]
 
-    for row in df.itertuples():
-        launch_date = row[0][df.index.names.index('start_month')] # gets the index number of 'start_date' in the df.index list
-        launch_date = pd.Period(launch_date, freq='M')
-        last_date = df.columns[-1]
-        # HERE GET LOE DATE IF KNOWN
-        # USE IT TO CALC LIFECYCLE PERIOD
-        # ONLY USE LAUNCH DATE IF LOE DATE NOT KNOWN
-        life_cycle_per = last_date - launch_date
+    if shed is not None:
+        if _debug: print('using passed shed:')
+        uptake_dur = shed.uptake_dur
+        plat_dur = shed.plat_dur
+        gen_mult = shed.gen_mult
 
-        out_array = trend(row[1:], _interval, n_pers=n_pers, life_cycle_per=life_cycle_per,
+    if term_gr_pa is not None:
+        term_gr = term_gr_pa / 12
+
+    # define the lifecycle period in which loe will occur, according to input shed or shape data
+    # - this is used to fix the actual lcycle period
+    loe_lcycle_per = uptake_dur + plat_dur
+
+    for row in df.itertuples():
+
+        if _debug: print('\nMolecule'.ljust(pad), row[0][df.index.names.index('molecule')])
+        if _debug: print('Setting'.ljust(pad), row[0][df.index.names.index('setting')])
+        # get loe date
+        loe_month = pd.Period(row[0][df.index.names.index('loe_date')], freq='M'); 
+        if _debug: print('loe_month'.ljust(pad), loe_month)
+
+        start_month = row[0][df.index.names.index('start_month')] # gets the index number of 'start_date' in the df.index list
+        start_month = pd.Period(start_month, freq='M')
+        if _debug: print('start_month'.ljust(pad), start_month)
+
+        last_month = df.columns[-1]
+        if _debug: print('last_month'.ljust(pad), last_month)
+
+        # get time after / before loe (before negative)
+        pers_post_loe = last_month - loe_month
+        if _debug: print('pers_post_loe'.ljust(pad), pers_post_loe)
+
+        # infer the lifecycle period from this
+        life_cycle_per = loe_lcycle_per + pers_post_loe
+        if _debug: print('life_cycle_per'.ljust(pad), life_cycle_per)
+
+        out_array = trend(row[1:], _interval, n_pers=n_pers, life_cycle_per=life_cycle_per, shed=shed,
                         uptake_dur=uptake_dur, plat_dur=plat_dur, gen_mult=gen_mult, 
-                        name=row[0][0], term_rate_pa=term_rate_pa,  
-                        _out_type='array', _debug=_debug)
+                        name=row[0][0], term_gr_pa=term_gr_pa,  
+                        _out_type='array', _debug=False)
 
         out.append(out_array)
 
     # Build the df index and columns
 
-    cols = pd.PeriodIndex(start=last_date+1, periods=n_pers, freq='M')
+    cols = pd.PeriodIndex(start=last_month+1, periods=n_pers, freq='M')
     
     return pd.DataFrame(out, index=df.index, columns=cols)
 
@@ -307,7 +351,7 @@ def r_trend(df, n_pers, *, uptake_dur=None, plat_dur=None, gen_mult=None, term_r
 ##_________________________________________________________________________##
 
 def r_trend_old(df, n_pers, *, streak_len_thresh=12, delta_thresh = 0.2,
-        uptake_dur=90, plat_dur=24, gen_mult=0.9, term_rate_pa=0,
+        uptake_dur=90, plat_dur=24, gen_mult=0.9, term_gr_pa=0,
           threshold_rate=0.001, ma_interval=12, _debug=False):
     
     '''iterates through an input df
@@ -318,8 +362,8 @@ def r_trend_old(df, n_pers, *, streak_len_thresh=12, delta_thresh = 0.2,
 
     for row in df.itertuples():
 
-        max_sales = row[0][df.index.names.index('max_sales')]
-        inferred_launch_output = infer_launch(row[1:], max_sales=max_sales, delta_threshold = delta_thresh,
+        max_spend = row[0][df.index.names.index('max_spend')]
+        inferred_launch_output = infer_launch(row[1:], max_spend=max_spend, delta_threshold = delta_thresh,
                                                  _ma_interval=ma_interval, _debug=_debug)
 
         # print(inferred_launch_output)
@@ -335,7 +379,7 @@ def r_trend_old(df, n_pers, *, streak_len_thresh=12, delta_thresh = 0.2,
 
             out_array = trend(row[1:], ma_interval, n_pers=n_pers, life_cycle_per=life_cycle_per,
                             uptake_dur=uptake_dur, plat_dur=plat_dur, gen_mult=gen_mult, 
-                            name=row[0][0], term_rate_pa=term_rate_pa,  
+                            name=row[0][0], term_gr_pa=term_gr_pa,  
                             _out_type='array', _debug=_debug)
 
 
@@ -343,7 +387,7 @@ def r_trend_old(df, n_pers, *, streak_len_thresh=12, delta_thresh = 0.2,
             print("for ", row[0][0], " NO inferred launch")           
             out_array = trend(row[1:], ma_interval, n_pers=n_pers, life_cycle_per=0,
                 uptake_dur=0, plat_dur=0, gen_mult=gen_mult, 
-                name=row[0][0], term_rate_pa=term_rate_pa,  
+                name=row[0][0], term_gr_pa=term_gr_pa,  
                 _out_type='array', _debug=_debug)
 
         if _debug: print(out_array[-10:])
@@ -448,20 +492,20 @@ def r_tprofile(df, n_pers, *, profile):
 
 ##_________________________________________________________________________##
 
-def r_terminal(df, n_pers, *, term_rate_pa, _debug=False):
+def r_terminal(df, n_pers, *, term_gr_pa, _debug=False):
     '''take average of last 3 monthly values and extrapolate at terminal rate
     
     default args:   data_in, n_pers
     
-    r_args:         term_rate_pa     - terminal rate, annual (positive)
+    r_args:         term_gr_pa     - terminal rate, annual (positive)
     
     return:         dataframe
     
     '''
     # make an initial np array with growth, based on index-1 = 1
 
-    term_rate_mo = float(term_rate_pa) / 12
-    x = np.array([(1+term_rate_mo)**np.arange(1,n_pers+1)]*len(df))
+    term_gr_mo = float(term_gr_pa) / 12
+    x = np.array([(1+term_gr_mo)**np.arange(1,n_pers+1)]*len(df))
     ave_last = df.iloc[:,-3:].sum(axis=1)/3
     x=x*ave_last[:,None]
     
@@ -476,10 +520,10 @@ def r_terminal(df, n_pers, *, term_rate_pa, _debug=False):
 ##_________________________________________________________________________##
 
 def r_fut(df, n_pers, *, profile, cutoff_date,
-          coh_growth_pa, term_growth_pa, name='future', _debug=True):
+          coh_gr_pa, term_gr_pa, name='future', _debug=True):
     
-    coh_growth = coh_growth_pa /12
-    term_growth = term_growth_pa /12
+    coh_gr = coh_gr_pa /12
+    term_gr = term_gr_pa /12
 
     # check if profile is an array yet
     if isinstance(profile, str):
@@ -506,7 +550,7 @@ def r_fut(df, n_pers, *, profile, cutoff_date,
         print("n_pers".ljust(pad), n_pers,"\nlast_date".ljust(pad), last_date,"\ncutoff_date".ljust(pad), cutoff_date,"\nl_start".ljust(pad), l_start,"\nl_stop".ljust(pad), l_stop,"\nproj_start".ljust(pad), proj_start,"\nproj_stop".ljust(pad), proj_stop)
     
     # note this gets a projection for one period behind the required, to allow scaling.  This must be sliced off later.
-    fut = pf.get_forecast(profile, l_start, l_stop, coh_growth,term_growth,1, proj_start-1, proj_stop, name=name)
+    fut = pf.get_forecast(profile, l_start, l_stop, coh_gr,term_gr,1, proj_start-1, proj_stop, name=name)
     if _debug: print(fut)
         
     # now get scaling factor. Take cumulative sum for last period in slice passed
@@ -530,67 +574,74 @@ def r_fut(df, n_pers, *, profile, cutoff_date,
 
 
 
-def r_fut_tr(df, n_pers, *, cutoff_date, uptake_dur, plat_dur, gen_mult, 
-             coh_growth_pa, term_growth_pa, name='future', _debug=False):
+def r_fut_tr(df, n_pers, *, cut_off, shed=None, uptake_dur=None, plat_dur=None, gen_mult=None, 
+             coh_gr_pa=None, coh_gr=None, term_gr_pa=None, term_gr=None, name='future', _debug=False):
     
     '''Generates a projection of spend on future launches, based on cumulation
     of a lifecycle profile (itself imputed from observations), and scaled using observations.
+
+    Note only returns the future projection, not the input past observations
+
+    1. Make a shape corresponding to the passed shed
+    2. Use this to project a forecast (unscaled)
+    3. Scale the forecast to the last period of actual observations
+    4. Slice the forecast to give the future only
+
     '''
 
+    pad = 25
 
-    coh_growth = coh_growth_pa /12
-    term_growth = term_growth_pa /12
+    # first sort out the input variables - still supports loose shape parameters (i.e. not in a shed)
+    if shed is not None:
+        if _debug: print('using passed shed\n')
+        uptake_dur = shed.uptake_dur
+        plat_dur = shed.plat_dur
+        gen_mult = shed.gen_mult
 
-    # work out what l_start and l_stop should be, and how passed to get_forecast()
+    if term_gr_pa is not None:
+        term_gr = term_gr_pa / 12
 
-    # sum the df, as we don't care about individual products.  NB it's now a Series
-    
-    cutoff_date = pd.Period(cutoff_date)
+    if coh_gr_pa is not None:
+        coh_gr = coh_gr_pa / 12
+
+    # will be working with the sum of the input df
     df=df.sum()
-    last_date = df.index[-1]
-    
-    # use trend() to generate a profile for future cohorts
-    # this willjust take the summed df as if it were a single line of spend
-    # with a launch date and lifecycle period
-    # then apply profile parameters such as uptake_dur as for r_trend() etc
-    
-    life_cycle_per = last_date - cutoff_date
-    if _debug: print('life_cycle_per'.ljust(20), life_cycle_per)
-    
-    if life_cycle_per <24: 
-        print("WARNING: calling trend() with less than 2 years input data.  ")
-        print("This may cause problems with the moving average calculation, which is currently hard-coded to compare two years I think")
-        
-    profile = trend(df, 12, life_cycle_per=life_cycle_per, uptake_dur=uptake_dur, plat_dur=plat_dur, 
-               gen_mult=gen_mult, term_rate_pa=term_growth_pa,_debug=False, n_pers = n_pers)
-    
-    
-    # now continue with the future cohorts
-    
-    l_start=0
-    l_stop=(last_date - cutoff_date)+n_pers
-    proj_start=(last_date - cutoff_date)
-    proj_stop=(last_date - cutoff_date)+n_pers
-    
-    if _debug: 
-        pad=20
-        print("n_pers".ljust(pad), n_pers,"\nlast_date".ljust(pad), last_date,"\ncutoff_date".ljust(pad), cutoff_date,"\nl_start".ljust(pad), l_start,"\nl_stop".ljust(pad), l_stop,"\nproj_start".ljust(pad), proj_start,"\nproj_stop".ljust(pad), proj_stop)
-    
-    # note this gets a projection for one period behind the required, to allow scaling.  This must be sliced off later.
-    fut = pf.get_forecast(profile, l_start, l_stop, coh_growth,term_growth,1, proj_start-1, proj_stop, name=name)
-    if _debug: print(fut)
-        
-    # now get scaling factor. Take cumulative sum for last period in slice passed
-    # (also should have available the actual period from the slice - do later)
-    last_sum = df[-1]
 
-    # to scale, want the period just before the fut forecast to equal last_sum.  Deliberately overlap, and then snip off first period?
-    scaler=last_sum/fut.iloc[0]
+    # get useful dates
+    cut_off = pd.Period(cut_off)
+    last_date = df.index[-1]
+
+
+    # 1. Make a shape from the passed shed
+    shape = pt.make_shape1(shed=shed)
+
+    # 2. Use this to project a forecast.
+    # - need to project for n_pers plus the overlap with actual
+    overlap = last_date - cut_off
+    if _debug: 
+        print('cut off:'.ljust(pad), cut_off)
+        print('last_date:'.ljust(pad), last_date)
+        print('overlapping periods:'.ljust(pad), overlap)
+
+    fut = pf.get_forecast1(shape, term_gr=term_gr, coh_gr=coh_gr, n_pers=n_pers+overlap, name=name)
+
+    # 3. Scale the forecast
+    #  Take cumulative sum for last period in slice passed
+    last_sum = df[-1]
+    if _debug: print('spend at last period'.ljust(pad), last_sum)
+
+    # to scale, want the period just before the fut forecast to equal last_sum.  
+    if _debug: print('spend at overlap period'.ljust(pad), fut.iloc[overlap])
+    scaler=last_sum/fut.iloc[overlap-1]
+    if _debug: print('scaler to apply'.ljust(pad), scaler)
     
-    if _debug: print(last_sum, scaler)
-    
-    out = (fut*scaler)[1:]
-    
-    out.index=pd.PeriodIndex(start=last_date+1, periods=n_pers, freq='M')
+    fut = (fut*scaler)
+    if _debug: print("\ntail of actual:\n", df.tail(), "\n")
+    if _debug: print("\nscaled fut at overlap:\n", fut[overlap-5:overlap+5].head(), "\n")
+
+    # 4. Slice the forecast to give the future only
+    out = fut[overlap:]
+
+    out.index=pd.PeriodIndex(start=last_date+1, periods=len(out), freq='M')
 
     return pd.DataFrame(out)
