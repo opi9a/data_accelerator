@@ -1,11 +1,13 @@
 import pandas as pd
 import numpy as np
+from openpyxl import load_workbook
 from matplotlib import pyplot as plt
 from matplotlib import rcParams
 import matplotlib.ticker as ticker
 import projection_funcs as pf
 from collections import namedtuple
 import inspect
+import os
 
 
 def spend_mult(sav_rate, k1=None, k2=None, ratio=None):
@@ -37,7 +39,7 @@ def spend_mult(sav_rate, k1=None, k2=None, ratio=None):
 
 
 
-def dump_to_xls(res_df, outfile, in_dict=None, shapes=None, log=False, _debug=False):
+def dump_to_xls(res_df, outfile, append=False, prefix="", in_dict=None, shapes=None, log=False, _debug=False):
     '''Dump a results DataFrame to an xls, with option to make shapes from a  
      dict of scenarios or from a scenario alone, and/or passing shapes
     '''
@@ -71,10 +73,20 @@ def dump_to_xls(res_df, outfile, in_dict=None, shapes=None, log=False, _debug=Fa
     annual_out = params_header.append(res_df.groupby(res_df.index.year).sum())
 
     # write out
-    writer = pd.ExcelWriter(outfile)
-    shapes_out.to_excel(writer, 'shapes')
-    main_out.to_excel(writer, 'main')
-    annual_out.to_excel(writer, 'annual')
+    if append:
+        if os.path.isfile(outfile):
+            book = load_workbook(outfile)
+            writer = pd.ExcelWriter(outfile, engine="openpyxl")
+            writer.book = book
+        else: 
+            print("could not find file to append to.  will make a new one")
+            writer = pd.ExcelWriter(outfile)
+
+    else: writer = pd.ExcelWriter(outfile)
+
+    shapes_out.to_excel(writer, prefix + 'shapes')
+    main_out.to_excel(writer, prefix + 'main')
+    annual_out.to_excel(writer, prefix + 'annual')
 
     writer.save()
 
