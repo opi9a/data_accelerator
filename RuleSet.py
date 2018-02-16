@@ -10,7 +10,7 @@ import inspect
 class RuleSet:
 
     def __init__(self, parent_df, name='generic', string_slice=None, index_slice=None,
-                func_str="", func=None, f_args={}, join_output=True):
+                func_str="", func=None, f_args={}, join_output=True, log=None):
             
         '''Creates an instance of a RuleSet - which allows the application of a 
         projection rule to a defined set of products.
@@ -68,6 +68,7 @@ class RuleSet:
 
         '''
 
+        self.pad = 25
 
         self.name = name
         self.parent_df = parent_df
@@ -91,7 +92,10 @@ class RuleSet:
         self.summed = None
         self.out_fig = ""
 
-       
+        if log is not None:
+            self.log = log
+
+
     def set_slice(self, input_slice):
         '''Set the index_slice dictionary.
 
@@ -136,15 +140,18 @@ class RuleSet:
             return inspect.getfullargspec(self.func)[4]
 
     
-
-    def xtrap(self, n_pers):
+    def xtrap(self, n_pers, _debug=False):
 
         slice= get_ix_slice(self.parent_df, self.index_slice)
+
+        if _debug: print('got slice\n', slice)
+
         self.past = self.parent_df.loc[slice,:]
 
         if self.func == None:
             print("no function assigned")
             return
+
         
         self.fut = self.func(self.past, n_pers, **self.f_args)
 

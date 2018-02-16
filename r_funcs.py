@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import projection_funcs as pf
 import policy_tools as pt
+import inspect
 from pprint import pprint
 
 profs_table={'prof1':'c:/Users/groberta/Work/data_accelerator/profiles/prof1.csv',
@@ -146,8 +147,13 @@ def trend(prod, interval, *, launch_cat=None, life_cycle_per=0,
         interval    The number of periods (back from last observation) that are used
                     to calculate the trend
     '''
-    
-    lpad, rpad = 20, 20
+
+    # _debug = True
+
+    if _debug: print("\nIN FUNCTION:  ".ljust(20), inspect.stack()[0][3])
+    if _debug: print("..called by:  ".ljust(20), inspect.stack()[1][3], end="\n\n")
+
+    pad, lpad, rpad = 20, 20, 20
 
     if _debug: 
         print('\nIn '.ljust(lpad),  name)
@@ -156,21 +162,31 @@ def trend(prod, interval, *, launch_cat=None, life_cycle_per=0,
     # make sure initial array is ok
     if isinstance(prod, pd.Series):
         prod = np.array(prod)
+        if _debug: print('found a series')
+
+    if isinstance(prod, tuple):
+        prod = np.array(prod)
+        if _debug: print('found a tuple')
 
     elif not isinstance(prod, np.array):
         print("DON'T KNOW WHAT HAS BEEN PASSED - make sure its not a dataframe")
         return
 
+    if _debug: 
+        print('prod is now'.ljust(pad), type(prod))
+        print(prod[:12], '\n')
 
     if shed is not None:
         if _debug: print('using passed shed:')
         uptake_dur = shed.uptake_dur
         plat_dur = shed.plat_dur
         gen_mult = shed.gen_mult
-        if _debug: 
-            print(" - uptake_dur".ljust(lpad), uptake_dur)
-            print(" - plat_dur".ljust(lpad), plat_dur)
-            print(" - gen_mult".ljust(lpad), gen_mult)
+
+    if _debug: 
+        print(" - uptake_dur".ljust(lpad), uptake_dur)
+        print(" - plat_dur".ljust(lpad), plat_dur)
+        print(" - gen_mult".ljust(lpad), gen_mult)
+        print("lifecycle period".ljust(lpad), life_cycle_per)
 
     if term_gr_pa is not None:
         term_gr = term_gr_pa/12
@@ -227,13 +243,18 @@ def trend(prod, interval, *, launch_cat=None, life_cycle_per=0,
     # first sort out all the periods
 
     out = np.array([i_dict['last_spend_ma']]) # this period overlaps with past, will be snipped later
+    if _debug: print('out1'.ljust(pad), out)
 
     if i_dict['phase'] == 'terminal':
         # simplifies, plus avoids applying gen_mult if already in terminal
         # different to 
+        if _debug: print('adding terminal phase')
         out = out[-1] * ((1 + term_gr) ** np.arange(1, n_pers+1))
+        if _debug: print('out - terminal'.ljust(pad), out)
 
     else:
+
+        if _debug: print('finding pre-terminal phases')
 
         i_dict['uptake_pers'] = min(max(uptake_dur - life_cycle_per, 0), 
                                                     n_pers - (len(out)-1))
@@ -242,7 +263,6 @@ def trend(prod, interval, *, launch_cat=None, life_cycle_per=0,
         life_cycle_per += i_dict['uptake_pers']
 
         out = np.append(out, uptake_out)
-
         i_dict['plat_pers'] = min(max((uptake_dur + plat_dur) - life_cycle_per, 0),
                                                     n_pers - (len(out)-1))
         plat_out = out[-1] * np.ones(i_dict['plat_pers'])
@@ -259,7 +279,6 @@ def trend(prod, interval, *, launch_cat=None, life_cycle_per=0,
         out[out<0] = 0
 
 
-
    
     if _debug: 
         i_dict['__s5'] = "spacer"
@@ -271,6 +290,7 @@ def trend(prod, interval, *, launch_cat=None, life_cycle_per=0,
     if _out_type == 'dict':
         i_dict['prod_ma'] = prod_ma
         i_dict['projection'] = out
+        if _debug: print("\LEAVING:  ", inspect.stack()[0][3])
         return i_dict
 
     elif _out_type == 'df':
@@ -279,53 +299,88 @@ def trend(prod, interval, *, launch_cat=None, life_cycle_per=0,
         spacer[:] = np.nan
         out=np.insert(out, 0, spacer)
         df=pd.DataFrame([prod, prod_ma, out], index=['raw', 'mov_ave', 'projected']).T
+        if _debug: print("\LEAVING:  ", inspect.stack()[0][3])
         return df
 
     else:
+        if _debug: print("\LEAVING:  ", inspect.stack()[0][3])
         return out[1:]
 
 
 ##_________________________________________________________________________##
 
-def r_trend(df, n_pers, *, shed=None, uptake_dur=None, plat_dur=None, gen_mult=None, term_gr=0, term_gr_pa=None,
-          threshold_rate=0.001, _interval=24, _debug=False):
+def r_trend(df, n_pers, *, shed=None, uptake_dur=None, plat_dur=None, gen_mult=None, term_gr=0, 
+          threshold_rate=0.001, _interval=24, use_eff_loe=True, _debug=False):
     
-    '''iterates through an input df
-    applies trend()
-    returns 
+    '''Iterates through an input df, applying trend(), returning a df of projections.
+
+    Key logic is calculation of lifecycle period, which is passed to trend() to orient the projection.
+    This is currently done with reference to the loe date.  
+
+    Eg if last observation is 1-2017, and loe date for a product is 1-2020, then the lifecycle period is 
+    36 periods before the loe lifecycle period (which is uptake_dur + plat_dur).
+
+    So if uptake_dur=56, plat_dur=100, lifecycle period is 120 (56+120-36).  When passing to trend(), another
+    36 periods of plateau will be projected, and then the loe drop will be applied.
+
+    To reflect a lag in erosion, therefore need to position product further back in lifecyle.  
+    In above example, if lag was 6m, pass the lifecycle period of 114, so that 42 periods of plateau are applied.
+
+    Currently do this by using a variable in the df for eff_loe_month (with conditional flag use_eff_loe).  
+    Also could actually change the lifecycle model to include an erosion period (not yet).
+ 
     '''
-    pad = 20
+    if _debug: print("\nIN FUNCTION:  ".ljust(20), inspect.stack()[0][3])
+    if _debug: print("..called by:  ".ljust(20), inspect.stack()[1][3], end="\n\n")
+
+    pad = 25
     out=[]
 
+    #  housekeeping - assign lifecycle variables depending on what was passed
     if shed is not None:
         if _debug: print('using passed shed:')
         uptake_dur = shed.uptake_dur
         plat_dur = shed.plat_dur
         gen_mult = shed.gen_mult
 
-    if term_gr_pa is not None:
-        term_gr = term_gr_pa / 12
-
     # define the lifecycle period in which loe will occur, according to input shed or shape data
     # - this is used to fix the actual lcycle period
     loe_lcycle_per = uptake_dur + plat_dur
 
+    # enter the key loop through rows in the input df
     for row in df.itertuples():
 
-        if _debug: print('\nMolecule'.ljust(pad), row[0][df.index.names.index('molecule')])
-        if _debug: print('Setting'.ljust(pad), row[0][df.index.names.index('setting')])
-        # get loe date
-        loe_month = pd.Period(row[0][df.index.names.index('loe_date')], freq='M'); 
-        if _debug: print('loe_month'.ljust(pad), loe_month)
+        # TODO make params a dict, rather than have to look up by index number
+        params = row[0]
+        data = row[1:]
 
-        start_month = row[0][df.index.names.index('start_month')] # gets the index number of 'start_date' in the df.index list
+        if _debug: print('\nMolecule'.ljust(pad), params[df.index.names.index('molecule')])
+        if _debug: print('Setting'.ljust(pad), params[df.index.names.index('setting')])
+
+        # get loe month - look for eff_loe_month first
+        if _debug: print('look for eff loe?'.ljust(pad), use_eff_loe)
+        if _debug: print('eff_loe_month in params?'.ljust(pad), 'eff_loe_month' in df.index.names)
+        if use_eff_loe and 'eff_loe_month' in df.index.names:
+            if _debug: print('found eff loe month'.ljust(pad), end=" ")
+            loe_month = params[df.index.names.index('eff_loe_month')]; 
+
+        # if not, just take the loe_date and turn into a month
+        else: 
+            if _debug: print('taking raw loe date'.ljust(pad), end=" ")
+            loe_month = pd.Period(params[df.index.names.index('loe_date')], freq='M'); 
+        
+        if _debug: print(loe_month)
+
+        # get start month - PRETTY MUCH DEPRECATED AS GO OFF LOE NOW
+        start_month = params[df.index.names.index('start_month')] # gets the index number of 'start_date' in the df.index list
         start_month = pd.Period(start_month, freq='M')
         if _debug: print('start_month'.ljust(pad), start_month)
 
+        # get date of last month in actual data
         last_month = df.columns[-1]
         if _debug: print('last_month'.ljust(pad), last_month)
 
-        # get time after / before loe (before negative)
+        # get time after / before loe (negative if befote loe)
         pers_post_loe = last_month - loe_month
         if _debug: print('pers_post_loe'.ljust(pad), pers_post_loe)
 
@@ -333,9 +388,9 @@ def r_trend(df, n_pers, *, shed=None, uptake_dur=None, plat_dur=None, gen_mult=N
         life_cycle_per = loe_lcycle_per + pers_post_loe
         if _debug: print('life_cycle_per'.ljust(pad), life_cycle_per)
 
-        out_array = trend(row[1:], _interval, n_pers=n_pers, life_cycle_per=life_cycle_per, shed=shed,
-                        uptake_dur=uptake_dur, plat_dur=plat_dur, gen_mult=gen_mult, 
-                        name=row[0][0], term_gr_pa=term_gr_pa,  
+        # call trend
+        out_array = trend(data, _interval, n_pers=n_pers, life_cycle_per=life_cycle_per, shed=shed,
+                        name=params[0], term_gr=term_gr,  
                         _out_type='array', _debug=False)
 
         out.append(out_array)
@@ -343,7 +398,9 @@ def r_trend(df, n_pers, *, shed=None, uptake_dur=None, plat_dur=None, gen_mult=N
     # Build the df index and columns
 
     cols = pd.PeriodIndex(start=last_month+1, periods=n_pers, freq='M')
-    
+
+    if _debug: print("\LEAVING:  ", inspect.stack()[0][3])
+
     return pd.DataFrame(out, index=df.index, columns=cols)
 
 
