@@ -153,27 +153,35 @@ def trend(prod, interval, *, launch_cat=None, life_cycle_per=0,
     if _debug: print("\nIN FUNCTION:  ".ljust(20), inspect.stack()[0][3])
     if _debug: print("..called by:  ".ljust(20), inspect.stack()[1][3], end="\n\n")
 
-    pad, lpad, rpad = 20, 20, 20
+    pad, lpad, rpad = 30, 30, 20
 
     if _debug: 
-        print('\nIn '.ljust(lpad),  name)
+        print('\nInput name(?) '.ljust(lpad),  name)
         print('type'.ljust(lpad), type(prod))
 
     # make sure initial array is ok
     if isinstance(prod, pd.Series):
         prod = np.array(prod)
-        if _debug: print('found a series')
+        if _debug: print('found a series, len'.ljust(pad), len(prod))
 
-    if isinstance(prod, tuple):
+    elif isinstance(prod, tuple):
         prod = np.array(prod)
-        if _debug: print('found a tuple')
+        if _debug: print('found a tuple, len'.ljust(pad), len(prod))
 
-    elif not isinstance(prod, np.array):
+    elif isinstance(prod, np.ndarray):
+        prod = np.array(prod)
+        if _debug: print('found an ndarray, len'.ljust(pad), len(prod))
+        if len(prod) ==1:
+            if _debug: print('unpacking array of len 1')
+            prod = prod[0]
+            if _debug: print('array len now'.ljust(pad), len(prod))
+
+    else:
         print("DON'T KNOW WHAT HAS BEEN PASSED - make sure its not a dataframe")
         return
 
     if _debug: 
-        print('prod is now'.ljust(pad), type(prod))
+        print('\nhead of prod')
         print(prod[:12], '\n')
 
     if shed is not None:
@@ -303,7 +311,7 @@ def trend(prod, interval, *, launch_cat=None, life_cycle_per=0,
         return df
 
     else:
-        if _debug: print("\LEAVING:  ", inspect.stack()[0][3])
+        if _debug: print("\nLEAVING:  ", inspect.stack()[0][3])
         return out[1:]
 
 
