@@ -72,7 +72,7 @@ def dump_to_xls(res_df, outfile, append=False, prefix="", in_dict=None, shapes=N
     main_out = params_header.append(res_df)
     annual_out = params_header.append(res_df.groupby(res_df.index.year).sum())
 
-    # write out
+    # write out - either appending or making a new one, or not appending
     if append:
         if os.path.isfile(outfile):
             book = load_workbook(outfile)
@@ -82,6 +82,7 @@ def dump_to_xls(res_df, outfile, append=False, prefix="", in_dict=None, shapes=N
             print("could not find file to append to.  will make a new one")
             writer = pd.ExcelWriter(outfile)
 
+    # not appending
     else: writer = pd.ExcelWriter(outfile)
 
     shapes_out.to_excel(writer, prefix + 'shapes')
@@ -827,13 +828,14 @@ class SpendLine():
     But no annualisation within this class except in the string.
 
     '''
-    def __init__(self, name, shed, 
+    def __init__(self, name, shed, loe_delay=0,
                        term_gr=0, launch_delay=0, launch_stop=None, coh_gr=0, 
                        peak_spend=1, icer=None, sav_rate=0,
                        log=None):
 
         self.name = name
         self.shed = shed
+        self.loe_delay = loe_delay
         self.term_gr = term_gr
         self.coh_gr = coh_gr
         self.peak_spend = peak_spend
@@ -862,6 +864,7 @@ class SpendLine():
             "  - uptake_dur:".ljust(pad1) + str(self.shed.uptake_dur).rjust(pad2),
             "  - plat_dur:".ljust(pad1) + str(self.shed.plat_dur).rjust(pad2),
             "  - gen_mult:".ljust(pad1) + str(self.shed.gen_mult).rjust(pad2),
+            "loe_delay:".ljust(pad1) + str(self.loe_delay).rjust(pad2),
             "term_gr:".ljust(pad1) + str(self.term_gr).rjust(pad2),
             "launch_delay:".ljust(pad1) + str(self.launch_delay).rjust(pad2),
             "launch_stop:".ljust(pad1) + str(self.launch_stop).rjust(pad2),

@@ -251,7 +251,6 @@ def trend(prod, interval, *, launch_cat=None, life_cycle_per=0,
     # first sort out all the periods
 
     out = np.array([i_dict['last_spend_ma']]) # this period overlaps with past, will be snipped later
-    if _debug: print('out1'.ljust(pad), out)
 
     if i_dict['phase'] == 'terminal':
         # simplifies, plus avoids applying gen_mult if already in terminal
@@ -318,7 +317,8 @@ def trend(prod, interval, *, launch_cat=None, life_cycle_per=0,
 ##_________________________________________________________________________##
 
 def r_trend(df, n_pers, *, shed=None, uptake_dur=None, plat_dur=None, gen_mult=None, term_gr=0, 
-          threshold_rate=0.001, _interval=24, use_eff_loe=True, _debug=False):
+            loe_delay=None, use_eff_loe=True, 
+            threshold_rate=0.001, _interval=24, _out_type='array', _debug=False):
     
     '''Iterates through an input df, applying trend(), returning a df of projections.
 
@@ -334,8 +334,12 @@ def r_trend(df, n_pers, *, shed=None, uptake_dur=None, plat_dur=None, gen_mult=N
     To reflect a lag in erosion, therefore need to position product further back in lifecyle.  
     In above example, if lag was 6m, pass the lifecycle period of 114, so that 42 periods of plateau are applied.
 
-    Currently do this by using a variable in the df for eff_loe_month (with conditional flag use_eff_loe).  
-    Also could actually change the lifecycle model to include an erosion period (not yet).
+    To do this, can set a variable in the df for eff_loe_month (with conditional flag use_eff_loe).  
+    Also have facility to accept an loe_delay parameter.  
+    Could include this loe_delay parameter in the lifecycle model.
+
+    _out_type='array' specifies that trend() returns an array, obv, which is required for the actual projections.
+    But can pass 'df' to get the dataframe output (showing mov ave etc) if calling to visualise projections etc. 
  
     '''
     if _debug: print("\nIN FUNCTION:  ".ljust(20), inspect.stack()[0][3])
@@ -369,13 +373,19 @@ def r_trend(df, n_pers, *, shed=None, uptake_dur=None, plat_dur=None, gen_mult=N
         if _debug: print('look for eff loe?'.ljust(pad), use_eff_loe)
         if _debug: print('eff_loe_month in params?'.ljust(pad), 'eff_loe_month' in df.index.names)
         if use_eff_loe and 'eff_loe_month' in df.index.names:
-            if _debug: print('found eff loe month'.ljust(pad), end=" ")
             loe_month = params[df.index.names.index('eff_loe_month')]; 
+            if _debug: print('found eff loe month'.ljust(pad), loe_month)
+
 
         # if not, just take the loe_date and turn into a month
         else: 
             if _debug: print('taking raw loe date'.ljust(pad), end=" ")
             loe_month = pd.Period(params[df.index.names.index('loe_date')], freq='M'); 
+
+        # now look for an loe_delay parameter
+        if loe_delay is not None:
+            loe_month += loe_delay
+            if _debug: print('adding loe_delay of '.ljust(pad), loe_delay)
         
         if _debug: print(loe_month)
 
@@ -399,11 +409,15 @@ def r_trend(df, n_pers, *, shed=None, uptake_dur=None, plat_dur=None, gen_mult=N
         # call trend
         out_array = trend(data, _interval, n_pers=n_pers, life_cycle_per=life_cycle_per, shed=shed,
                         name=params[0], term_gr=term_gr,  
-                        _out_type='array', _debug=False)
+                        _out_type=_out_type, _debug=False)
 
         out.append(out_array)
 
-    # Build the df index and columns
+    # just return this out list of dataframes if passing 'df' as _out_type (eg for visualisations)
+    if _out_type == 'df':
+        return out
+
+    # Otherwise build the df index and columns and return a single df
 
     cols = pd.PeriodIndex(start=last_month+1, periods=n_pers, freq='M')
 
@@ -639,7 +653,7 @@ def r_fut(df, n_pers, *, profile, cutoff_date,
 
 
 
-def r_fut_tr(df, n_pers, *, cut_off, shed=None, uptake_dur=None, plat_dur=None, gen_mult=None, 
+def r_fut_tr(df, n_pers, *, cut_off, shed=None, loe_delay=None,
              coh_gr_pa=None, coh_gr=None, term_gr_pa=None, term_gr=None, name='future', _debug=False):
     
     '''Generates a projection of spend on future launches, based on cumulation
@@ -656,12 +670,25 @@ def r_fut_tr(df, n_pers, *, cut_off, shed=None, uptake_dur=None, plat_dur=None, 
 
     pad = 25
 
-    # first sort out the input variables - still supports loose shape parameters (i.e. not in a shed)
-    if shed is not None:
-        if _debug: print('using passed shed\n')
-        uptake_dur = shed.uptake_dur
-        plat_dur = shed.plat_dur
-        gen_mult = shed.gen_mult
+    # INCREMENT PLAT_DUR BY LOE DELAY before passing to make_shape1()
+    # The non future trend functions use this differently, as they need to calculate the loe_month for
+    # extending observations etc, based on observed loe date.  Think it's ok this way but need to be aware.
+
+    # for future want to probably include this as part of shed.  Though there's an argument it's
+    # really part of the plat_dur (in effect), and the need to fiddle around is only when you are working out 
+    # the plat_dur from an external loe date.
+    
+    if loe_delay is not None:
+        if _debug: print('remaking shed to add loe delay\n')
+        shed = pt.Shed(shed.shed_name + '_1', 
+                       shed.uptake_dur,
+                       shed.plat_dur + loe_delay,
+                       shed.gen_mult)
+        if _debug: 
+            print("shed now")
+            print(shed)
+   
+
 
     if term_gr_pa is not None:
         term_gr = term_gr_pa / 12
