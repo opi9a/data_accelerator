@@ -1,4 +1,8 @@
 import pandas as pd
+import numpy as np
+from matplotlib import pyplot as plt
+plt.style.use('bmh')
+
 import RuleSet
 import r_funcs as rf
 
@@ -97,21 +101,28 @@ def make_rsets(df, params_dict,
 ##____________________________________________________________________________________________________________##
 
 
-    def plot_rset_projs(rs_dict, num_plots=12, n_pers=None, out_folder='figs/test_plot_rset/', save_fig=True):
-    df_out = pd.DataFrame()
-    gen_list = {}
+def plot_rset_projs(rs_dict, num_plots=12, n_pers=120, out_folder='figs/test_plot_rset/', 
+                    save_fig=True, zeros_to_nans=False, _debug=False):
+    
+    '''Helper function for plotting projections of individual products in rulesets.
+
+    For a dict of rulesets, sorts by max sales and takes num_plots highest.
+
+    Then for each generates a plot containing each product in the high sales set.
+    '''
+
+    plt.close("all")
+    pad = 35
+
     # iterate non future rsets
     for r in [x for x in rs_dict.keys() if not x.endswith('_fut')]:
         # get the top n by max sales
-        print(r)
+        print('\nin rset'.ljust(pad), r)
         top_n = rs_dict[r].past.loc[rs_dict[r].past.max(axis=1).sort_values(ascending=False).head(num_plots).index]
         
         #get into £m annualisex
         top_n *=12/10**8
-           
-        # get periods
-        if n_pers is None: n_pers = len(rs_dict[r].fut)
-            
+                      
         # get the LIST OF dfs from r_trend with an _out_type='df' flag
         df_list = rf.r_trend(top_n, n_pers=n_pers,
                                    shed = rs_dict[r].f_args['shed'],
@@ -121,32 +132,72 @@ def make_rsets(df, params_dict,
         
         eff_plat_len = rs_dict[r].f_args['shed'].plat_dur + rs_dict[r].f_args['loe_delay']
         eff_total_len = rs_dict[r].f_args['shed'].uptake_dur + rs_dict[r].f_args['shed'].plat_dur + rs_dict[r].f_args['loe_delay']
-        print('eff plat length is ', eff_plat_len)
-        # add to the list of lists of dfs
-        gen_list[r] = df_list
-
+        if _debug: print('eff plat length is ', eff_plat_len)
+        if _debug: print('eff total length is ', eff_total_len)
         
-
+        # make graph for this ruleset (remember in a loop here already)
         fig, ax = plt.subplots(num_plots, figsize=(12, num_plots * 6))
+
+        # now loop through the returned dataframes - one per product
         for i, df in enumerate(df_list):
+
+            if _debug: print('\ndf number'.ljust(pad), i)
+            if _debug: print('..corresponding product name'.ljust(pad), top_n.iloc[i].name[0])
+
+            loe_date = pd.Period(top_n.iloc[i].name[6], freq='M')
+            if _debug: print('..with loe'.ljust(pad), loe_date)
+
+            # make the index, from the top_n input dataframe, adding n_pers
+            ind_start = top_n.columns[0]
+            if _debug: print('ind start'.ljust(pad), ind_start)
+            ind = pd.PeriodIndex(start=ind_start, periods = len(top_n.columns) + n_pers).to_timestamp()
+            if _debug: print('ind end'.ljust(pad), ind[-1])
+            if _debug: print('total periods'.ljust(pad), len(ind))
+
+            # snip df to length of index - THERE IS A STRAY PERIOD COMING FROM SOMEWHERE
+
+            if _debug: print('length of dfs'.ljust(pad), len(df))
+            if len(df) > len(ind):
+                if _debug: print('snipping df.. ..')
+                df = df.iloc[:len(ind), :]
+                if _debug: print("length now".ljust(pad), len(df))
+
+            ind_end = pd.Period(ind[-1], freq='M')
+            if _debug: print('index end'.ljust(pad), ind_end)
+
+            # and now loop through the actual columns in the dataframe for the product
             for col in df:
-                ind = pd.PeriodIndex(start=pd.Period('1-2007', freq='M'), periods=len(df)).to_timestamp()
-                ax[i].plot(ind, df[col])
-            ax[i].set_title(top_n.iloc[i].name[0])
+                if zeros_to_nans: 
+                    ax[i].plot(ind, zero_to_nan(df[col]))
+                else:
+                    ax[i].plot(ind, df[col])
+
+            ax[i].set_title(top_n.iloc[i].name[0] + ", loe: " + str(loe_date))
             if i%4 == 0:
                 ax[i].legend(['actual', 'mov ave.', 'projected'])
             pat_exp = pd.Period(top_n.iloc[i].name[6], freq='M')
-            lim_0 = (pat_exp - eff_total_len).to_timestamp()
-            lim_1 = (pat_exp - eff_plat_len).to_timestamp()
-            lim_2 = (pat_exp).to_timestamp()
+            lim_0 = max(ind_start, (pat_exp - eff_total_len)).to_timestamp()
+            lim_1 = max(ind_start, (pat_exp - eff_plat_len)).to_timestamp()
+            lim_2 = min(ind_end, max(ind_start, (pat_exp))).to_timestamp()
             lim_3 = None
-            ax[i].axvline(x=lim_1, linestyle='--', color='gray')
-            ax[i].axvline(x=lim_2, color='gray')
-            ax[i].axvspan(lim_0, lim_1, facecolor='g', alpha=0.1)
-            ax[i].axvspan(lim_1, lim_2, facecolor='r', alpha=0.1)
+
+ 
+            if lim_1 > ind_start.to_timestamp(): 
+                ax[i].axvspan(lim_0, lim_1, facecolor='g', alpha=0.1)
+                # only draw the line if in scope
+                if lim_1 < ind_end.to_timestamp():
+                    ax[i].axvline(x=lim_1, linestyle='--', color='gray')
+
+            if lim_2 > ind_start.to_timestamp(): 
+                ax[i].axvspan(lim_1, lim_2, facecolor='r', alpha=0.1)
                 
+                # only draw the line if in scope
+                if lim_2 < ind_end.to_timestamp():
+                    ax[i].axvline(x=lim_2, color='gray')
+
         fig.savefig(out_folder + r + '.png')
-#     return gen_list 
-plt.close("all")
-plots_out = plot_rset_projs(dict(x=base_out['biol_sec']), num_plots=3, save_fig=False)
-plots_out = plot_rset_projs(base_out, num_plots=40, save_fig=True)
+
+
+def zero_to_nan(values):
+    """Replace every 0 with 'nan' and return a copy."""
+    return [float('nan') if x==0 else x for x in values]
