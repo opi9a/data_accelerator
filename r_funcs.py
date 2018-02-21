@@ -134,7 +134,7 @@ def infer_launch(in_arr, max_spend, streak_len_threshold=12, delta_threshold = 0
 ##_________________________________________________________________________##
 
 def trend(prod, interval, *, launch_cat=None, life_cycle_per=0,
-          shed=None, uptake_dur=120, plat_dur=24, gen_mult=0, term_gr_pa=None,
+          shed=None, loe_delay=0, uptake_dur=120, plat_dur=24, gen_mult=0, term_gr_pa=None,
           term_gr = 0,  threshold_rate=0.001, n_pers=12, 
           _out_type='array', _debug=False, name=None):
 
@@ -153,7 +153,7 @@ def trend(prod, interval, *, launch_cat=None, life_cycle_per=0,
     if _debug: print("\nIN FUNCTION:  ".ljust(20), inspect.stack()[0][3])
     if _debug: print("..called by:  ".ljust(20), inspect.stack()[1][3], end="\n\n")
 
-    pad, lpad, rpad = 30, 30, 20
+    pad, lpad, rpad = 35, 35, 20
 
     if _debug: 
         print('\nInput name(?) '.ljust(lpad),  name)
@@ -187,14 +187,17 @@ def trend(prod, interval, *, launch_cat=None, life_cycle_per=0,
     if shed is not None:
         if _debug: print('using passed shed:')
         uptake_dur = shed.uptake_dur
-        plat_dur = shed.plat_dur
+        plat_dur = shed.plat_dur + loe_delay
         gen_mult = shed.gen_mult
+
 
     if _debug: 
         print(" - uptake_dur".ljust(lpad), uptake_dur)
         print(" - plat_dur".ljust(lpad), plat_dur)
+        print("(after adding loe_delay of)".ljust(lpad), loe_delay)
         print(" - gen_mult".ljust(lpad), gen_mult)
         print("lifecycle period".ljust(lpad), life_cycle_per)
+
 
     if term_gr_pa is not None:
         term_gr = term_gr_pa/12
@@ -306,6 +309,8 @@ def trend(prod, interval, *, launch_cat=None, life_cycle_per=0,
         spacer[:] = np.nan
         out=np.insert(out, 0, spacer)
         df=pd.DataFrame([prod, prod_ma, out], index=['raw', 'mov_ave', 'projected']).T
+        # get rid of the ugly trajectory of mov_ave from zero
+        df['mov_ave'][:interval] = np.nan
         if _debug: print("\LEAVING:  ", inspect.stack()[0][3])
         return df
 
@@ -317,8 +322,7 @@ def trend(prod, interval, *, launch_cat=None, life_cycle_per=0,
 ##_________________________________________________________________________##
 
 def r_trend(df, n_pers, *, shed=None, uptake_dur=None, plat_dur=None, gen_mult=None, term_gr=0, 
-            loe_delay=None, use_eff_loe=True, 
-            threshold_rate=0.001, _interval=24, _out_type='array', _debug=False):
+            loe_delay=None, threshold_rate=0.001, _interval=24, _out_type='array', _debug=False):
     
     '''Iterates through an input df, applying trend(), returning a df of projections.
 
@@ -334,8 +338,7 @@ def r_trend(df, n_pers, *, shed=None, uptake_dur=None, plat_dur=None, gen_mult=N
     To reflect a lag in erosion, therefore need to position product further back in lifecyle.  
     In above example, if lag was 6m, pass the lifecycle period of 114, so that 42 periods of plateau are applied.
 
-    To do this, can set a variable in the df for eff_loe_month (with conditional flag use_eff_loe).  
-    Also have facility to accept an loe_delay parameter.  
+    To do this, pass an loe_delay parameter that in turn goes to trend() and extends plat_dur.  
     Could include this loe_delay parameter in the lifecycle model.
 
     _out_type='array' specifies that trend() returns an array, obv, which is required for the actual projections.
@@ -345,7 +348,7 @@ def r_trend(df, n_pers, *, shed=None, uptake_dur=None, plat_dur=None, gen_mult=N
     if _debug: print("\nIN FUNCTION:  ".ljust(20), inspect.stack()[0][3])
     if _debug: print("..called by:  ".ljust(20), inspect.stack()[1][3], end="\n\n")
 
-    pad = 25
+    pad = 35
     out=[]
 
     #  housekeeping - assign lifecycle variables depending on what was passed
@@ -369,30 +372,9 @@ def r_trend(df, n_pers, *, shed=None, uptake_dur=None, plat_dur=None, gen_mult=N
         if _debug: print('\nMolecule'.ljust(pad), params[df.index.names.index('molecule')])
         if _debug: print('Setting'.ljust(pad), params[df.index.names.index('setting')])
 
-        # get loe month - look for eff_loe_month first
-        if _debug: print('look for eff loe?'.ljust(pad), use_eff_loe)
-        if _debug: print('eff_loe_month in params?'.ljust(pad), 'eff_loe_month' in df.index.names)
-        if use_eff_loe and 'eff_loe_month' in df.index.names:
-            loe_month = params[df.index.names.index('eff_loe_month')]; 
-            if _debug: print('found eff loe month'.ljust(pad), loe_month)
-
-
-        # if not, just take the loe_date and turn into a month
-        else: 
-            if _debug: print('taking raw loe date'.ljust(pad), end=" ")
-            loe_month = pd.Period(params[df.index.names.index('loe_date')], freq='M'); 
-
-        # now look for an loe_delay parameter
-        if loe_delay is not None:
-            loe_month += loe_delay
-            if _debug: print('adding loe_delay of '.ljust(pad), loe_delay)
-        
-        if _debug: print(loe_month)
-
-        # get start month - PRETTY MUCH DEPRECATED AS GO OFF LOE NOW
-        start_month = params[df.index.names.index('start_month')] # gets the index number of 'start_date' in the df.index list
-        start_month = pd.Period(start_month, freq='M')
-        if _debug: print('start_month'.ljust(pad), start_month)
+        # get loe month
+        loe_month = pd.Period(params[df.index.names.index('loe_date')], freq='M'); 
+        if _debug: print('taking raw loe date'.ljust(pad), loe_month)
 
         # get date of last month in actual data
         last_month = df.columns[-1]
@@ -408,13 +390,14 @@ def r_trend(df, n_pers, *, shed=None, uptake_dur=None, plat_dur=None, gen_mult=N
 
         # call trend
         out_array = trend(data, _interval, n_pers=n_pers, life_cycle_per=life_cycle_per, shed=shed,
-                        name=params[0], term_gr=term_gr,  
-                        _out_type=_out_type, _debug=False)
+                        loe_delay=loe_delay, name=params[0], term_gr=term_gr,  
+                        _out_type=_out_type, _debug=_debug)
 
         out.append(out_array)
 
     # just return this out list of dataframes if passing 'df' as _out_type (eg for visualisations)
     if _out_type == 'df':
+        if _debug: print("\LEAVING:  ", inspect.stack()[0][3])
         return out
 
     # Otherwise build the df index and columns and return a single df

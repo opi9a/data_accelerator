@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+import inspect
 from matplotlib import pyplot as plt
 plt.style.use('bmh')
 
@@ -101,56 +102,91 @@ def make_rsets(df, params_dict,
 ##____________________________________________________________________________________________________________##
 
 
-def plot_rset_projs(rs_dict, num_plots=12, n_pers=120, out_folder='figs/test_plot_rset/', 
-                    save_fig=True, zeros_to_nans=False, _debug=False):
+def plot_rset_projs(rs_dict_in, selection=None, agg_filename=None, num_plots=12, n_pers=120, out_folder='figs/test_plot_rset/', 
+                    save_fig=True, _debug=False):
     
     '''Helper function for plotting projections of individual products in rulesets.
 
     For a dict of rulesets, sorts by max sales and takes num_plots highest.
 
     Then for each generates a plot containing each product in the high sales set.
+
+    Selection: pass a list of product names instead of finding products with max sales
+
+    agg_filename: puts together in a single image file if pass a name (no need for a .png ending)
     '''
+    if _debug: print("\nIN FUNCTION:  ".ljust(20), inspect.stack()[0][3])
+    if _debug: print("..called by:  ".ljust(20), inspect.stack()[1][3], end="\n\n")   
 
     plt.close("all")
     pad = 35
 
+    # first exclude future rsets
+    rs_dict = {x:rs_dict_in[x] for x in rs_dict_in.keys() if 'fut' not in x}
+
+    # set up to make a single figure if aggregating
+    if agg_filename is not None:
+        if selection is not None:
+            if _debug: print('aggregating for a selection')
+            num_plots = len(selection)
+            if _debug: print('num_plots'.ljust(pad), num_plots)
+
+        else: 
+            if _debug: print('aggregating across rulesets')
+            num_plots = len(rs_dict * num_plots)
+            if _debug: print('num_plots'.ljust(pad), num_plots)
+
+        fig, ax = plt.subplots(num_plots, figsize=(12, num_plots * 6))
+
     # iterate non future rsets
     for r in [x for x in rs_dict.keys() if not x.endswith('_fut')]:
-        # get the top n by max sales
+        # select data by max sales
         print('\nin rset'.ljust(pad), r)
-        top_n = rs_dict[r].past.loc[rs_dict[r].past.max(axis=1).sort_values(ascending=False).head(num_plots).index]
+
+        selected = None
+
+        # use selection if passed
+        if selection is not None:
+            selected = rs_dict[r].past.loc[selection]
+
+        # otherwise take top by sales
+        else:
+            selected = rs_dict[r].past.loc[rs_dict[r].past.max(axis=1).sort_values(ascending=False).head(num_plots).index]
         
-        #get into £m annualisex
-        top_n *=12/10**8
+        if _debug: print('length of selection'.ljust(pad), len(selected))
+        #get into £m annualised
+        selected *=12/10**8
                       
         # get the LIST OF dfs from r_trend with an _out_type='df' flag
-        df_list = rf.r_trend(top_n, n_pers=n_pers,
+        df_list = rf.r_trend(selected, n_pers=n_pers,
                                    shed = rs_dict[r].f_args['shed'],
                                    term_gr = rs_dict[r].f_args['term_gr'],
                                    loe_delay = rs_dict[r].f_args['loe_delay'],
                                    _out_type='df')
         
-        eff_plat_len = rs_dict[r].f_args['shed'].plat_dur + rs_dict[r].f_args['loe_delay']
-        eff_total_len = rs_dict[r].f_args['shed'].uptake_dur + rs_dict[r].f_args['shed'].plat_dur + rs_dict[r].f_args['loe_delay']
-        if _debug: print('eff plat length is ', eff_plat_len)
-        if _debug: print('eff total length is ', eff_total_len)
+
+        plat_dur = rs_dict[r].f_args['shed'].plat_dur
+        total_dur = rs_dict[r].f_args['shed'].uptake_dur + plat_dur
+        if _debug: print('plat length is '.ljust(pad), plat_dur)
+        if _debug: print('total length is '.ljust(pad), total_dur)
         
-        # make graph for this ruleset (remember in a loop here already)
-        fig, ax = plt.subplots(num_plots, figsize=(12, num_plots * 6))
+        # make graph for this ruleset (remember in a loop here already), if not already made one for aggregate
+        if agg_filename is None:
+            fig, ax = plt.subplots(num_plots, figsize=(12, num_plots * 6))
 
         # now loop through the returned dataframes - one per product
         for i, df in enumerate(df_list):
 
             if _debug: print('\ndf number'.ljust(pad), i)
-            if _debug: print('..corresponding product name'.ljust(pad), top_n.iloc[i].name[0])
+            if _debug: print('..corresponding product name'.ljust(pad), selected.iloc[i].name[0])
 
-            loe_date = pd.Period(top_n.iloc[i].name[6], freq='M')
+            loe_date = pd.Period(selected.iloc[i].name[6], freq='M')
             if _debug: print('..with loe'.ljust(pad), loe_date)
 
-            # make the index, from the top_n input dataframe, adding n_pers
-            ind_start = top_n.columns[0]
+            # make the index, from the selected input dataframe, adding n_pers
+            ind_start = selected.columns[0]
             if _debug: print('ind start'.ljust(pad), ind_start)
-            ind = pd.PeriodIndex(start=ind_start, periods = len(top_n.columns) + n_pers).to_timestamp()
+            ind = pd.PeriodIndex(start=ind_start, periods = len(selected.columns) + n_pers).to_timestamp()
             if _debug: print('ind end'.ljust(pad), ind[-1])
             if _debug: print('total periods'.ljust(pad), len(ind))
 
@@ -165,37 +201,49 @@ def plot_rset_projs(rs_dict, num_plots=12, n_pers=120, out_folder='figs/test_plo
             ind_end = pd.Period(ind[-1], freq='M')
             if _debug: print('index end'.ljust(pad), ind_end)
 
+            # make an axes iterator that works with case if single plot
+            ax_it = None
+            if num_plots == 1:  ax_it = ax
+            else:               ax_it = ax[i]
+
             # and now loop through the actual columns in the dataframe for the product
             for col in df:
-                if zeros_to_nans: 
-                    ax[i].plot(ind, zero_to_nan(df[col]))
-                else:
-                    ax[i].plot(ind, df[col])
+                ax_it.plot(ind, zero_to_nan(df[col]))
 
-            ax[i].set_title(top_n.iloc[i].name[0] + ", loe: " + str(loe_date))
+            ax_it.set_title(selected.iloc[i].name[0] + ", loe: " + str(loe_date))
             if i%4 == 0:
-                ax[i].legend(['actual', 'mov ave.', 'projected'])
-            pat_exp = pd.Period(top_n.iloc[i].name[6], freq='M')
-            lim_0 = max(ind_start, (pat_exp - eff_total_len)).to_timestamp()
-            lim_1 = max(ind_start, (pat_exp - eff_plat_len)).to_timestamp()
+                ax_it.legend(['actual', 'mov ave.', 'projected'])
+            pat_exp = pd.Period(selected.iloc[i].name[6], freq='M')
+            lim_0 = max(ind_start, (pat_exp - total_dur)).to_timestamp()
+            lim_1 = max(ind_start, (pat_exp - plat_dur)).to_timestamp()
             lim_2 = min(ind_end, max(ind_start, (pat_exp))).to_timestamp()
             lim_3 = None
 
  
             if lim_1 > ind_start.to_timestamp(): 
-                ax[i].axvspan(lim_0, lim_1, facecolor='g', alpha=0.1)
+                ax_it.axvspan(lim_0, lim_1, facecolor='g', alpha=0.1)
                 # only draw the line if in scope
                 if lim_1 < ind_end.to_timestamp():
-                    ax[i].axvline(x=lim_1, linestyle='--', color='gray')
+                    ax_it.axvline(x=lim_1, linestyle='--', color='gray')
 
             if lim_2 > ind_start.to_timestamp(): 
-                ax[i].axvspan(lim_1, lim_2, facecolor='r', alpha=0.1)
+                ax_it.axvspan(lim_1, lim_2, facecolor='r', alpha=0.1)
                 
                 # only draw the line if in scope
                 if lim_2 < ind_end.to_timestamp():
-                    ax[i].axvline(x=lim_2, color='gray')
+                    ax_it.axvline(x=lim_2, color='gray')
 
-        fig.savefig(out_folder + r + '.png')
+            ax_it.set_ylim(0)
+
+        if agg_filename is None:
+            fig.savefig(out_folder + r + '.png')
+
+    if agg_filename is not None:
+        fig.savefig(out_folder + agg_filename + '.png')
+
+    if _debug: print("\nLEAVING:  ", inspect.stack()[0][3])
+
+##_________________________________________________________________________##
 
 
 def zero_to_nan(values):
