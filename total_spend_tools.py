@@ -165,12 +165,15 @@ def plot_rset_projs(rs_dict, num_plots=12, n_pers=120, out_folder='figs/test_plo
             ind_end = pd.Period(ind[-1], freq='M')
             if _debug: print('index end'.ljust(pad), ind_end)
 
+
+            if zeros_to_nans: df = df[!=0]
+
             # and now loop through the actual columns in the dataframe for the product
             for col in df:
-                if zeros_to_nans: 
-                    ax[i].plot(ind, zero_to_nan(df[col]))
-                else:
-                    ax[i].plot(ind, df[col])
+                # if zeros_to_nans: 
+                #     ax[i].plot(ind, zero_to_nan(df[col]))
+                # else:
+                ax[i].plot(ind, df[col])
 
             ax[i].set_title(top_n.iloc[i].name[0] + ", loe: " + str(loe_date))
             if i%4 == 0:
