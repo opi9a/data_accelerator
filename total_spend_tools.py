@@ -280,13 +280,16 @@ def plot_rset_projs(rs_dict_in, selection=None, agg_filename=None, num_plots=12,
             elif agg_filename:  ax_it = ax[agg_i]
             else:               ax_it = ax[i]
 
+            if zeros_to_nans: df = df[!=0]
+
             # and now loop through the actual columns in the dataframe for the product
             for col in df:
-                ax_it.plot(ind, zero_to_nan(df[col]))
+                ax_it.plot(ind, df[col])
 
             plot_name = selected.iloc[i].name[0]
             if agg_filename: plot_name = ext_selection[agg_i]
             else: plot_name = selected.iloc[i].name[0]
+
 
             ax_it.set_title(plot_name + ", loe: " + str(loe_date))
             if i%4 == 0:
