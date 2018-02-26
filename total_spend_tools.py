@@ -2,6 +2,8 @@ import pandas as pd
 import numpy as np
 import inspect
 from matplotlib import pyplot as plt
+from matplotlib import rcParams
+from matplotlib.backends.backend_pdf import PdfPages
 plt.style.use('bmh')
 
 import RuleSet
@@ -181,7 +183,8 @@ def plot_rset_projs(rs_dict_in, selection=None, agg_filename=None, num_plots=12,
     if _debug: print("\nIN FUNCTION:  ".ljust(20), inspect.stack()[0][3])
     if _debug: print("..called by:  ".ljust(20), inspect.stack()[1][3], end="\n\n")   
 
-    plt.close("all")
+    rcParams.update({'font.size': 8})
+
     pad = 35
 
     # first exclude future rsets
@@ -206,7 +209,8 @@ def plot_rset_projs(rs_dict_in, selection=None, agg_filename=None, num_plots=12,
             num_plots = len(rs_dict * num_plots)
             if _debug: print('num_plots (rulesets)'.ljust(pad), num_plots)
 
-        fig, ax = plt.subplots(num_plots, figsize=(12, num_plots * 6))
+        # set up a single pdf output file (if not agg, will do one anew for each ruleset)
+        pdf = PdfPages(out_folder + agg_filename + '.pdf')
 
     # make an iterator for if aggregating in a single fig
     agg_i = 0
@@ -243,12 +247,15 @@ def plot_rset_projs(rs_dict_in, selection=None, agg_filename=None, num_plots=12,
         if _debug: print('plat length is '.ljust(pad), plat_dur)
         if _debug: print('total length is '.ljust(pad), total_dur)
         
-        # make graph for this ruleset (remember in a loop here already), if not already made one for aggregate
+        # make pdf for this ruleset (remember in a loop here already), if not already made one for aggregate
         if agg_filename is None:
-            fig, ax = plt.subplots(num_plots, figsize=(12, num_plots * 6))
+            pdf = PdfPages(out_folder + r + '.pdf')
 
-        # now loop through the returned dataframes - one per product
+        # now loop through the returned dataframes - one per product (each with 3 cols / lines to plot)
         for i, df in enumerate(df_list):
+
+            # first get rid of zeros for cleaner plotting
+            df = df[df!=0]
 
             if _debug: print('\ndf number'.ljust(pad), i)
             if _debug: print('..corresponding product name'.ljust(pad), selected.iloc[i].name[0])
@@ -274,26 +281,27 @@ def plot_rset_projs(rs_dict_in, selection=None, agg_filename=None, num_plots=12,
             ind_end = pd.Period(ind[-1], freq='M')
             if _debug: print('index end'.ljust(pad), ind_end)
 
-            # make an axes iterator that works with case if single plot
-            ax_it = None
-            if num_plots == 1:  ax_it = ax
-            elif agg_filename:  ax_it = ax[agg_i]
-            else:               ax_it = ax[i]
+            # # make an axes iterator that works with case if single plot
+            # ax_it = None
+            # if num_plots == 1:  ax_it = ax
+            # elif agg_filename:  ax_it = ax[agg_i]
+            # else:               ax_it = ax[i]
 
-            if zeros_to_nans: df = df[!=0]
+            # make a figure for this df (remember, one product, 3 lines)
+            fig, ax = plt.subplots(dpi=200)
 
             # and now loop through the actual columns in the dataframe for the product
             for col in df:
-                ax_it.plot(ind, df[col])
+                ax.plot(ind, df[col], linewidth=1)
 
             plot_name = selected.iloc[i].name[0]
             if agg_filename: plot_name = ext_selection[agg_i]
             else: plot_name = selected.iloc[i].name[0]
 
 
-            ax_it.set_title(plot_name + ", loe: " + str(loe_date))
+            ax.set_title(plot_name + ", loe: " + str(loe_date))
             if i%4 == 0:
-                ax_it.legend(['actual', 'mov ave.', 'projected'])
+                ax.legend(['actual', 'mov ave.', 'projected'])
             pat_exp = pd.Period(selected.iloc[i].name[6], freq='M')
             lim_0 = max(ind_start, (pat_exp - total_dur)).to_timestamp()
             lim_1 = max(ind_start, (pat_exp - plat_dur)).to_timestamp()
@@ -302,30 +310,34 @@ def plot_rset_projs(rs_dict_in, selection=None, agg_filename=None, num_plots=12,
 
  
             if lim_1 > ind_start.to_timestamp(): 
-                ax_it.axvspan(lim_0, lim_1, facecolor='g', alpha=0.1)
+                ax.axvspan(lim_0, lim_1, facecolor='g', alpha=0.1)
                 # only draw the line if in scope
                 if lim_1 < ind_end.to_timestamp():
-                    ax_it.axvline(x=lim_1, linestyle='--', color='gray')
+                    ax.axvline(x=lim_1, linestyle='--', linewidth=1, color='gray')
 
             if lim_2 > ind_start.to_timestamp(): 
-                ax_it.axvspan(lim_1, lim_2, facecolor='r', alpha=0.1)
+                ax.axvspan(lim_1, lim_2, facecolor='r', alpha=0.1)
                 
                 # only draw the line if in scope
                 if lim_2 < ind_end.to_timestamp():
-                    ax_it.axvline(x=lim_2, color='gray')
+                    ax.axvline(x=lim_2,  linewidth=2, color='gray')
 
-            ax_it.set_ylim(0)
+            ax.set_ylim(0)
 
             if xlims is not None:
-                ax_it.set_xlim(xlims)
+                ax.set_xlim(xlims)
 
             agg_i +=1
 
+            # save to the pdf, and clear the plot
+            pdf.savefig()
+            plt.close()
+
         if agg_filename is None:
-            fig.savefig(out_folder + r + '.png')
+            pdf.close()
 
     if agg_filename is not None:
-        fig.savefig(out_folder + agg_filename + '.png')
+        pdf.close()
 
     if _debug: print("\nLEAVING:  ", inspect.stack()[0][3])
 
