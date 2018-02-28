@@ -160,12 +160,14 @@ def load_spend_dset(path='../spend_data_proc/consol_ey_dset/spend_dset_07FEB18a.
 ##____________________________________________________________________________________________________________##
 
 
-def plot_rset_projs(rs_dict_in, selection=None, agg_filename=None, num_plots=12, n_pers=120, xlims=None, 
+def plot_rset_projs(rs_dict_in, rsets=None, selection=None, agg_filename=None, file_suffix=None, num_plots=12, n_pers=120, xlims=None, 
                 out_folder='figs/test_plot_rset/', save_fig=True, _debug=False):
     
     '''Helper function for plotting projections of individual products in rulesets.
 
     For a dict of rulesets, sorts by max sales and takes num_plots highest.
+
+    If pass rsets list of keys, will only use those.
 
     Then for each generates a plot containing each product in the high sales set.
 
@@ -187,8 +189,15 @@ def plot_rset_projs(rs_dict_in, selection=None, agg_filename=None, num_plots=12,
 
     pad = 35
 
-    # first exclude future rsets
-    rs_dict = {x:rs_dict_in[x] for x in rs_dict_in.keys() if 'fut' not in x}
+    # first select only passed rsets  
+    if rsets is not None:
+        rs_dict = {x:rs_dict_in[x] for x in rsets}
+
+    # otherwise get rid of fut
+    else:
+        rs_dict = {x:rs_dict_in[x] for x in rs_dict_in.keys() if 'fut' not in x}
+
+    if _debug: print(rs_dict.keys())
 
     # set up to make a single figure if aggregating
     if agg_filename is not None:
@@ -249,7 +258,7 @@ def plot_rset_projs(rs_dict_in, selection=None, agg_filename=None, num_plots=12,
         
         # make pdf for this ruleset (remember in a loop here already), if not already made one for aggregate
         if agg_filename is None:
-            pdf = PdfPages(out_folder + r + '.pdf')
+            pdf = PdfPages(out_folder + r + file_suffix + '.pdf')
 
         # now loop through the returned dataframes - one per product (each with 3 cols / lines to plot)
         for i, df in enumerate(df_list):
@@ -341,41 +350,157 @@ def plot_rset_projs(rs_dict_in, selection=None, agg_filename=None, num_plots=12,
 
     if _debug: print("\nLEAVING:  ", inspect.stack()[0][3])
 
-##_________________________________________________________________________##
-
-
-def zero_to_nan(values):
-    """Replace every 0 with 'nan' and return a copy.
-    MAKE THIS A UFUNC"""
-    return [float('nan') if x==0 else x for x in values]
 
 
 ##_________________________________________________________________________##
 
 
-def plot_hi_lo_base(hi, lo, df, scen_names, base_params=None, base_out=None, 
-    trim=('1-2010', '12-2023'), colors=['darkred', 'seagreen', 'grey'], figsize=(12,6),
+def plot_hi_lo_base(hi_params=None, hi_out=None, lo_params=None, lo_out=None, base_params=None, base_out=None, df=None, 
+    scen_names=None,  trim=('1-2010', '12-2023'), colors=['darkred', 'seagreen', 'black'], figsize=(12,6),
     outfile=None, fig=None, ax=None, return_fig=False):
 
-    if base_params is None and base_out is None:
-        print("need either base parameters or actual data")
-        return
+    '''Helper function to plot sensitivity analysis scenarios.
 
-    if base_params: base_out = tst.make_rsets(df, hi, return_sum=True, trim=trim)
+    Either takes projection series (eg hi_out) or parameters that are used to generate projections (eg hi_params)
 
-    hi_out = make_rsets(df, hi, return_sum=True, trim=trim)
-    lo_out = make_rsets(df, lo, return_sum=True, trim=trim)
+    If passing parameters, must also pass a dataframe.
+
+    Can take an existing fig or ax.
+    '''
+
+
+    if base_out is None:
+        if base_params is None: 
+            print("need either base parameters or projections")
+            return
+        else:
+            base_out = make_rsets(df, base_params, return_sum=True, trim=trim)
+
+    if hi_out is None:
+        if hi_params is None: 
+            print("need either hi parameters or projections")
+            return
+        else:
+            hi_out = make_rsets(df, hi_params, return_sum=True, trim=trim)
+
+    if lo_out is None:
+        if lo_params is None: 
+            print("need either low parameters or projections")
+            return
+        else:
+            lo_out = make_rsets(df, lo_params, return_sum=True, trim=trim)
+
+    # work out order
+    # last_vals = dict(hi_out=hi_out[-1], lo_out=lo_out[-1], base_out_sum=base_out_sum[-1])
 
     if fig is None and ax is None:
         fig, ax = plt.subplots(figsize=figsize)
 
     ind = base_out.index.to_timestamp()
     for i, s in enumerate([hi_out, lo_out, base_out]):
-        ax.plot(ind, s*12/10**11, color=colors[i], alpha=0.5)
-        
+        line = ax.plot(ind, s*12/10**11, color=colors[i], alpha=0.5)
+        if i==2: line[0].set_linewidth(4)
+
+    plt.fill_between(ind, lo_out*12/10**11, base_out*12/10**11, color='seagreen', alpha=0.15)
+    plt.fill_between(ind, base_out*12/10**11, hi_out*12/10**11, color='darkred', alpha=0.15)
     ax.legend(scen_names)
 
     if outfile: fig.savefig(outfile)
 
     if return_fig: return fig
 
+
+##_________________________________________________________________________##
+
+
+def plot_hi_lo_base1(in_dict, df=None, 
+                        trim=('1-2010', '12-2023'), figsize=(12,6),
+                        outfile=None, fig=None, ax=None, return_fig=False, _debug=False):
+
+    '''Pass in a dictionary of scenarios with structure:
+
+    in_dict = { 'hi': {'params': <parameters for constructing rsets and getting projections>,
+                       'sums':   <summed projections>,
+                       'color':  <color to plot this scenario>,
+                       'legend': <how this should be labelled in the legend>},
+
+                'baseline': {'params'.. etc},
+
+                'lo': {'params'.. etc}
+                }
+    
+    Keys of in_dict can be whatever - used as the names of the scenarios.  
+      (If one has 'base' it gets a thick line.)
+    Need either sums or (params plus a dataframe - which can calc sums).  
+    See Sensitivity Analysis notebook.
+
+    TODO 
+     - get default for dict where eg sums key missing
+     - smart infilling between lines
+
+    '''
+
+    pad = 30
+
+    # make a df of sums
+    sums_list = []
+
+    for s in in_dict:
+
+        this_sum = None
+
+        if _debug: print('in rset'.ljust(pad), s)
+
+        # check if missing sums, and get them if reqd.  Append to the df
+        if in_dict[s].get('sums', None) is None:
+
+            if _debug: print('no sum detected, so making one')
+
+            if df is None:
+                print('Need a df and params for ', s, ' so stopping here'); return
+
+            elif in_dict[s]['params'] is None:
+                print('Need params for ', s, ' so stopping here'); return
+
+            else: 
+                this_sum = make_rsets(df, in_dict[s]['params'], return_sum=True, trim=trim)
+                if _debug: print('got this\n', this_sum.head())
+
+        else: 
+            if _debug: print('found sums for this, so just going to trim it')
+            this_sum = in_dict[s]['sums'].loc[slice(pd.Period(trim[0], freq='M'), pd.Period(trim[1], freq='M'),None)]
+
+        this_sum.name = s
+
+        # at this point must have the sums
+        sums_list.append(this_sum)
+
+    # so we have a df of results    
+    res_df =  pd.concat(sums_list, axis=1)
+
+    if fig is None and ax is None:
+        fig, ax = plt.subplots(figsize=figsize)
+
+    ind = res_df.index.to_timestamp()
+
+    for i, s in enumerate(res_df):
+        line = ax.plot(ind, res_df[s]*12/10**11, alpha=0.5)
+        if in_dict[s].get('color', None) is not None:
+            line[0].set_color(in_dict[s]['color'])
+        if 'base' in s.lower(): line[0].set_linewidth(3)
+
+    # do filling in
+    # first get hold of the baseline
+    base_out_name = [x for x in res_df.columns if 'base' in x.lower()]
+
+    if len(base_out_name)==1: 
+        base_out_name = base_out_name[0]
+        for s in res_df.drop(base_out_name, axis=1):
+            fill_color = in_dict[s].get('color', 'grey')
+            plt.fill_between(ind, res_df[s]*12/10**11, res_df[base_out_name]*12/10**11, color=fill_color, alpha=0.15)
+
+    ax.legend([in_dict[s].get('legend',s) for s in in_dict])
+
+    if outfile: fig.savefig(outfile)
+
+    if return_fig: return fig

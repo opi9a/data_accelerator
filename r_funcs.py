@@ -339,7 +339,10 @@ def r_trend(df, n_pers, *, shed=None, uptake_dur=None, plat_dur=None, gen_mult=N
     In above example, if lag was 6m, pass the lifecycle period of 114, so that 42 periods of plateau are applied.
 
     To do this, pass an loe_delay parameter that in turn goes to trend() and extends plat_dur.  
-    Could include this loe_delay parameter in the lifecycle model.
+    Could include this loe_delay parameter in the lifecycle model.  
+
+    NOTE DOESN'T ACCEPT NEGATIVE LOE DELAYS - could do, but currently breaks.  See pregabalin:  the negative loe_delay
+    means the loe doesn't happen.  Don't know why.  V likely fixable but not done it, so just reject negative values.
 
     _out_type='array' specifies that trend() returns an array, obv, which is required for the actual projections.
     But can pass 'df' to get the dataframe output (showing mov ave etc) if calling to visualise projections etc. 
@@ -350,6 +353,9 @@ def r_trend(df, n_pers, *, shed=None, uptake_dur=None, plat_dur=None, gen_mult=N
 
     pad = 35
     out=[]
+
+    # Currently need to stop things if a negative value of loe_delay
+    if loe_delay <0: print('currently cannnot use negative loe delays'); return
 
     #  housekeeping - assign lifecycle variables depending on what was passed
     if shed is not None:
@@ -637,7 +643,7 @@ def r_fut(df, n_pers, *, profile, cutoff_date,
 
 
 def r_fut_tr(df, n_pers, *, cut_off, shed=None, loe_delay=None,
-             coh_gr_pa=None, coh_gr=None, term_gr_pa=None, term_gr=None, name='future', _debug=False):
+             coh_gr=None, term_gr=None, name='future', _debug=False):
     
     '''Generates a projection of spend on future launches, based on cumulation
     of a lifecycle profile (itself imputed from observations), and scaled using observations.
@@ -671,13 +677,6 @@ def r_fut_tr(df, n_pers, *, cut_off, shed=None, loe_delay=None,
             print("shed now")
             print(shed)
    
-
-
-    if term_gr_pa is not None:
-        term_gr = term_gr_pa / 12
-
-    if coh_gr_pa is not None:
-        coh_gr = coh_gr_pa / 12
 
     # will be working with the sum of the input df
     df=df.sum()
