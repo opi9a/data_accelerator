@@ -133,185 +133,248 @@ def infer_launch(in_arr, max_spend, streak_len_threshold=12, delta_threshold = 0
 
 ##_________________________________________________________________________##
 
-def trend(prod, interval, *, launch_cat=None, life_cycle_per=0,
-          shed=None, loe_delay=0, uptake_dur=120, plat_dur=24, gen_mult=0, term_gr_pa=None,
+def trend(prod, interval=24, *, launch_cat=None, life_cycle_per=0,
+          shed=None, loe_delay=0, term_gr_pa=None,
           term_gr = 0,  threshold_rate=0.001, n_pers=12, 
-          _out_type='array', _debug=False, name=None):
+          _out_type='array', start_m=None, _debug=False, name=None):
 
     '''Takes input array, with parameters, and returns a trend-based projection.
 
-    Parameters:
+    Key parameters:
 
-        prod        An input array of spend
+        prod            An input array of spend
 
-        interval    The number of periods (back from last observation) that are used
-                    to calculate the trend
+        interval        The number of periods (back from last observation) that are used
+                        to calculate the trend
+
+        life_cycle_per  Where the current period (i.e. last obs) lies in the lifecycle 
+
+        loe_delay       The periods by which actual fall in revenue is delayed beyond
+                        patent expiry
+
+        _out_type       Pass 'df' to return a df with raw past, mov ave past and projection.  
+                        (also pass a start_m to add a PeriodIndex to the df)
+
+    
+
+    Notes on use of loe_delay
+    -------------------------
+
+    The loe_delay is used to extend plat_dur.  This has two effects:  
+        
+        1. It may change the classification of the product's lifecycle phase.
+             
+             For example, if the life_cycle_per is 100 and uptake_dur + raw plat_dur
+             is 98, then the product would be classified to terminal phase.
+
+             But if an loe_delay of 6 was added, uptake_dur + plat_dur is 104.
+             That puts the product in plateau phase.
+
+             This is desirable, IF the loe_delay is correct - as, in the above eg,
+             at period 100 the product would not yet have had a drop in spend.
+
+             However it does put a lot of faith in the loe_delay when loe is close to
+             to the current period.  In particular, if it is too low and the product 
+             is classified to terminal phase when it has not yet had a spend reduction, 
+             it will lead to a large over-estimate of spend (assuming the drop would be large).
+
+             There is a smaller problem in the other direction - if loe_delay is too high,
+             the product will be classified to plateau even though it has already had a spend 
+             reduction.  It will then get another (but, presumably, this error will affect a
+             smaller starting spend level).
+
+             Potential solutions could include:
+                - identifying whether the product actually has had a drop
+                - allowing manual assignment to phase (eg as a var in the df)
+                - using gradual erosion (maybe)
+
+
+        2. It extends the plateau duration projection (if there is one)
+
+            This is more obvious, and less problematic.  Once the product is assigned to 
+            plateau phase, that will be extended by the amount of loe_delay
+
     '''
 
-    # _debug = True
 
     if _debug: print("\nIN FUNCTION:  ".ljust(20), inspect.stack()[0][3])
-    if _debug: print("..called by:  ".ljust(20), inspect.stack()[1][3], end="\n\n")
+    if _debug: print("..called by:  ".ljust(20), inspect.stack()[1][3], end="\n")
 
-    pad, lpad, rpad = 35, 35, 20
+    pad, lpad, rpad = 45, 35, 20
 
-    if _debug: 
-        print('\nInput name(?) '.ljust(lpad),  name)
-        print('type'.ljust(lpad), type(prod))
+    if _debug: print('\nPROCESSING ARRAY INPUT')
 
-    # make sure initial array is ok
     if isinstance(prod, pd.Series):
         prod = np.array(prod)
-        if _debug: print('found a series, len'.ljust(pad), len(prod))
+        if _debug: print('found a series, len'.ljust(pad), str(len(prod)).rjust(rpad))
 
     elif isinstance(prod, tuple):
         prod = np.array(prod)
-        if _debug: print('found a tuple, len'.ljust(pad), len(prod))
+        if _debug: print('found a tuple, len'.ljust(pad), str(len(prod)).rjust(rpad))
 
     elif isinstance(prod, np.ndarray):
         prod = np.array(prod)
-        if _debug: print('found an ndarray, len'.ljust(pad), len(prod))
+        if _debug: print('found an ndarray, len'.ljust(pad), str(len(prod)).rjust(rpad))
         if len(prod) ==1:
-            if _debug: print('unpacking array of len 1')
+            if _debug: print('unpacking array of unit length (i.e. actual array nested in a list with len==1)')
             prod = prod[0]
-            if _debug: print('array len now'.ljust(pad), len(prod))
+            if _debug: print('array len now'.ljust(pad), str(len(prod)).rjust(rpad))
+
 
     else:
         print("DON'T KNOW WHAT HAS BEEN PASSED - make sure its not a dataframe")
         return
 
-    if _debug: 
-        print('\nhead of prod')
-        print(prod[:12], '\n')
 
-    if shed is not None:
-        if _debug: print('using passed shed:')
-        uptake_dur = shed.uptake_dur
-        plat_dur = shed.plat_dur + loe_delay
-        gen_mult = shed.gen_mult
+    if _debug: print('\nPROCESSING LIFECYCLE INPUTS')
 
-
-    if _debug: 
-        print(" - uptake_dur".ljust(lpad), uptake_dur)
-        print(" - plat_dur".ljust(lpad), plat_dur)
-        print("(after adding loe_delay of)".ljust(lpad), loe_delay)
-        print(" - gen_mult".ljust(lpad), gen_mult)
-        print("lifecycle period".ljust(lpad), life_cycle_per)
-
+    uptake_dur = shed.uptake_dur
+    # NB  this is the critical use of loe_delay
+    plat_dur = shed.plat_dur + loe_delay
+    gen_mult = shed.gen_mult
 
     if term_gr_pa is not None:
         term_gr = term_gr_pa/12
 
+    if _debug: 
+        print(" - uptake_dur".ljust(pad), str(uptake_dur).rjust(rpad))
+        print(" - plat_dur".ljust(pad), str(plat_dur).rjust(rpad))
+        print("(after adding loe_delay of)".ljust(pad), str(loe_delay).rjust(rpad))
+        print(" - gen_mult".ljust(pad), str(gen_mult).rjust(rpad))
+        print("lifecycle period".ljust(pad), str(life_cycle_per).rjust(rpad))
+
     # make an annual moving average array
     prod[np.isnan(prod)]=0
     prod_ma = pf.mov_ave(prod, 12)
+
+
+    if _debug: print('\nANALYSING PAST SPEND')
+
+    max_spend        = np.nanmax(prod)
+    max_spend_per    = np.nanargmax(prod)
+    last_spend       = (prod[-1])
+
+    max_spend_ma     = np.nanmax(prod_ma)
+    max_spend_ma_per = np.nanargmax(prod_ma)
+    last_spend_ma    = (prod_ma[-1])
+
+    total_drop_ma    = max(0, max_spend_ma - last_spend_ma)
     
-    # get set of info
+    if not max_spend_ma == 0:
+        total_drop_ma_pct = total_drop_ma/max_spend_ma  
 
-    i_dict = {}
-    i_dict['__s0'] = "spacer" # just for printing the dict more nicely
-
-    # first classify to phase
-
-    if life_cycle_per <= uptake_dur:
-        i_dict['phase'] = 'uptake'
-
-    elif life_cycle_per <= uptake_dur + plat_dur:
-        i_dict['phase'] = 'plateau'
-
-    else: i_dict['phase'] = 'terminal'
-
-    # get spend info
-
-    i_dict['__s1'] = "spacer"
-    i_dict['max_spend'] = np.nanmax(prod)    
-    i_dict['max_spend_per'] = np.nanargmax(prod)
-    i_dict['last_spend'] = (prod[-1])
-
-    i_dict['__s2'] = "spacer"
-    i_dict['max_spend_ma'] = np.nanmax(prod_ma)    
-    i_dict['max_spend_ma_per'] = np.nanargmax(prod_ma)
-    i_dict['last_spend_ma'] = (prod_ma[-1])
-
-    # get drop from max 
-    i_dict['__s3'] = "spacer"
-    i_dict['total_drop_ma'] = max(0, i_dict['max_spend_ma'] - i_dict['last_spend_ma'])
-    if not i_dict['max_spend_ma'] == 0:
-        i_dict['total_drop_ma_pct'] = i_dict['total_drop_ma']/i_dict['max_spend_ma']
-    
     # get linear change per period over interval of periods
     # TODO calculate this on recent averages
-    i_dict['__s4'] = "spacer"
-    i_dict['interval'] = min(interval, len(prod))
-    i_dict['interval_delta'] = prod[-1] - prod[-(1 + interval)]
-    i_dict['interval_rate'] = i_dict['interval_delta'] / interval
+    interval = min(interval, len(prod))
+    interval_delta = prod[-1] - prod[-(1 + interval)]
+    interval_rate = interval_delta / interval
+    interval_rate_pct = None
+
     if not prod[-(1 + interval)] == 0:
-        i_dict['interval_rate_pct'] = i_dict['interval_rate'] / prod[-(1 + interval)]
-    i_dict['__endint'] = "spacer"
+        interval_rate_pct = interval_rate / prod[-(1 + interval)]
+ 
+    if _debug:
+        print("max spend in a single period".ljust(pad), "{:0,.0f}".format(max_spend).rjust(20))
+        print("period of max spend".ljust(pad), "{}".format(max_spend_per).rjust(rpad))
+        print("spend in last period".ljust(pad), "{:0,.0f}".format(last_spend).rjust(rpad))
+        print("max of mov ave spend".ljust(pad), "{:0,.0f}".format(max_spend_ma).rjust(rpad))
+        print("period of max mov ave spend".ljust(pad), "{}".format(max_spend_ma_per).rjust(rpad))
+        print("last obs mov ave spend".ljust(pad), "{:0,.0f}".format(last_spend_ma).rjust(rpad))
+        print("drop in mov ave".ljust(pad), "{:0,.0f}".format(total_drop_ma).rjust(rpad))
+        print("drop in mov ave pct".ljust(pad), "{:0,.0f}%".format(total_drop_ma_pct*100).rjust(rpad))
+        print("interval for calculating linear trend".ljust(pad), "{}".format(interval).rjust(rpad))
+        print("change over that interval".ljust(pad), "{:0,.0f}".format(interval_delta).rjust(rpad))
+        print("change per period over interval".ljust(pad), "{:0,.0f}".format(interval_rate).rjust(rpad))
+        print("change per period over interval pct".ljust(pad), "{:0,.0f}%".format(interval_rate_pct*100).rjust(rpad))
 
 
+    if _debug: print('\nCLASSIFYING TO PHASE')
 
-    # first sort out all the periods
+    if life_cycle_per <= uptake_dur: 
+        phase = 'uptake'
 
-    out = np.array([i_dict['last_spend_ma']]) # this period overlaps with past, will be snipped later
+    # note that plat_dur has been extended by the loe delay
+    elif life_cycle_per <= uptake_dur + plat_dur:
+        phase = 'plateau'
 
-    if i_dict['phase'] == 'terminal':
-        # simplifies, plus avoids applying gen_mult if already in terminal
-        # different to 
-        if _debug: print('adding terminal phase')
+    else: phase = 'terminal'
+
+    if _debug: print('Classified as'.ljust(pad), phase.rjust(rpad))
+
+
+    if _debug: print('\nCONSTRUCTING PROJECTION ARRAY')
+
+    out = np.array([last_spend_ma]) # this period overlaps with past, will be snipped later
+    if _debug: print('initial stub of proj. array'.ljust(pad), out)
+    
+    if phase == 'terminal':
+        # this is really a shortcut where we know it's in terminal
+        if _debug: print('\nIn terminal phase, so creating a terminal array')
         out = out[-1] * ((1 + term_gr) ** np.arange(1, n_pers+1))
-        if _debug: print('out - terminal'.ljust(pad), out)
+        if _debug: 
+            print('First 10 periods of terminal array:')
+            print(out[:10], end="\n")
 
     else:
 
-        if _debug: print('finding pre-terminal phases')
+        # This is the main work.  For each phase make an array, and append to the out array
+        if _debug: print('\nGenerating pre-terminal phases')
 
-        i_dict['uptake_pers'] = min(max(uptake_dur - life_cycle_per, 0), 
-                                                    n_pers - (len(out)-1))
-        uptake_out = out[-1] + (i_dict['interval_rate'] 
-                                                * np.arange(1,i_dict['uptake_pers']))
-        life_cycle_per += i_dict['uptake_pers']
+        # compute remaining UPTAKE periods and generate an array
+        uptake_pers = min(max(uptake_dur - life_cycle_per, 0),n_pers - (len(out)-1))
+        uptake_out = out[-1] + (interval_rate * np.arange(1,uptake_pers))
+        
+        # move the lifecycle period along to the end of uptake phase
+        life_cycle_per += uptake_pers
 
+        if _debug:
+            print("\nRemaining UPTAKE periods".ljust(pad), str(uptake_pers).rjust(rpad))
+            print("--> lifecycle period moved to".ljust(pad), str(life_cycle_per).rjust(rpad))
+
+        # append the uptake array to the out array
         out = np.append(out, uptake_out)
-        i_dict['plat_pers'] = min(max((uptake_dur + plat_dur) - life_cycle_per, 0),
-                                                    n_pers - (len(out)-1))
-        plat_out = out[-1] * np.ones(i_dict['plat_pers'])
-        life_cycle_per += i_dict['plat_pers']
 
+        # compute remaining PLATEAU periods, and generate an array 
+        # Note that plat_dur has been extended by loe_delay
+        plat_pers = min(max((uptake_dur + plat_dur) - life_cycle_per, 0), n_pers - (len(out)-1))
+        plat_out = out[-1] * np.ones(plat_pers)
+        life_cycle_per += plat_pers
+
+        if _debug:
+            print("\nRemaining PLATEAU periods".ljust(pad), str(plat_pers).rjust(rpad))
+            print("--> lifecycle period moved to".ljust(pad), str(life_cycle_per).rjust(rpad))
+
+        # append the plateau array to the out array
         out = np.append(out, plat_out)
 
-        i_dict['term_pers'] = max(n_pers - (len(out)-1), 0)
-        term_out = out[-1] * gen_mult * ((1 + term_gr) ** np.arange(1, i_dict['term_pers']+1))
+        # compute remaining TERMINAL periods and generate an array
+        term_pers = max(n_pers - (len(out)-1), 0)
+        term_out = out[-1] * gen_mult * ((1 + term_gr) ** np.arange(1, term_pers+1))
 
+        if _debug:
+            print("\nRemaining TERMINAL periods".ljust(pad), str(term_pers).rjust(rpad))
+
+        # append the terminal array to the out array
         out = np.append(out, term_out)
 
         # eliminate any negatives
         out[out<0] = 0
 
 
-   
-    if _debug: 
-        i_dict['__s5'] = "spacer"
-        for i in i_dict:
-            if i_dict[i]=="spacer": print("")
-            else:
-                print(i.ljust(lpad), str(i_dict[i]).rjust(rpad))
-
-    if _out_type == 'dict':
-        i_dict['prod_ma'] = prod_ma
-        i_dict['projection'] = out
-        if _debug: print("\LEAVING:  ", inspect.stack()[0][3])
-        return i_dict
-
-    elif _out_type == 'df':
-        if _debug: print('df output')
+    if _out_type == 'df':
+        if _debug: print('\nGenerating df output')
         spacer = np.empty(len(prod))
         spacer[:] = np.nan
         out=np.insert(out, 0, spacer)
         df=pd.DataFrame([prod, prod_ma, out], index=['raw', 'mov_ave', 'projected']).T
+
+        # add an index if a start month was passed
+        if start_m is not None:
+            df.index = pd.PeriodIndex(start=pd.Period(start_m, freq='M'), periods=len(df))
+
         # get rid of the ugly trajectory of mov_ave from zero
         df['mov_ave'][:interval] = np.nan
-        if _debug: print("\LEAVING:  ", inspect.stack()[0][3])
+        if _debug: print("\nLEAVING:  ", inspect.stack()[0][3])
         return df
 
     else:
@@ -324,7 +387,7 @@ def trend(prod, interval, *, launch_cat=None, life_cycle_per=0,
 def r_trend(df, n_pers, *, shed=None, uptake_dur=None, plat_dur=None, gen_mult=None, term_gr=0, 
             loe_delay=None, threshold_rate=0.001, _interval=24, _out_type='array', _debug=False):
     
-    '''Iterates through an input df, applying trend(), returning a df of projections.
+    '''Iterates through an input df, calling trend(), returning a df of projections.
 
     Key logic is calculation of lifecycle period, which is passed to trend() to orient the projection.
     This is currently done with reference to the loe date.  
@@ -341,11 +404,9 @@ def r_trend(df, n_pers, *, shed=None, uptake_dur=None, plat_dur=None, gen_mult=N
     To do this, pass an loe_delay parameter that in turn goes to trend() and extends plat_dur.  
     Could include this loe_delay parameter in the lifecycle model.  
 
-    NOTE DOESN'T ACCEPT NEGATIVE LOE DELAYS - could do, but currently breaks.  See pregabalin:  the negative loe_delay
-    means the loe doesn't happen.  Don't know why.  V likely fixable but not done it, so just reject negative values.
-
     _out_type='array' specifies that trend() returns an array, obv, which is required for the actual projections.
-    But can pass 'df' to get the dataframe output (showing mov ave etc) if calling to visualise projections etc. 
+    But can pass 'df' to get the dataframe output (showing mov ave etc) if calling to visualise projections etc.  
+    In this case, r_trend() will return a list of those dfs.
  
     '''
     if _debug: print("\nIN FUNCTION:  ".ljust(20), inspect.stack()[0][3])
@@ -355,7 +416,7 @@ def r_trend(df, n_pers, *, shed=None, uptake_dur=None, plat_dur=None, gen_mult=N
     out=[]
 
     # Currently need to stop things if a negative value of loe_delay
-    if loe_delay <0: print('currently cannnot use negative loe delays'); return
+    # if loe_delay <0: print('currently cannnot use negative loe delays'); return
 
     #  housekeeping - assign lifecycle variables depending on what was passed
     if shed is not None:
@@ -397,7 +458,7 @@ def r_trend(df, n_pers, *, shed=None, uptake_dur=None, plat_dur=None, gen_mult=N
         # call trend
         out_array = trend(data, _interval, n_pers=n_pers, life_cycle_per=life_cycle_per, shed=shed,
                         loe_delay=loe_delay, name=params[0], term_gr=term_gr,  
-                        _out_type=_out_type, _debug=_debug)
+                        _out_type=_out_type)
 
         out.append(out_array)
 

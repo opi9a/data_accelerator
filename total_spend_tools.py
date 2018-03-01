@@ -117,7 +117,7 @@ def make_rsets(df, params_dict,
 ##____________________________________________________________________________________________________________##
 
 
-def load_spend_dset(path='../spend_data_proc/consol_ey_dset/spend_dset_07FEB18a.pkl', phx_adj=1.6, add_start_m=True, _debug=False):
+def load_spend_dset(path='c://Users//groberta//Work//data_accelerator/spend_data_proc/consol_ey_dset/spend_dset_07FEB18a.pkl', phx_adj=1.6, add_start_m=True, _debug=False):
     '''Helper function to load the psned dataset
 
     Option to make the general adjustments to pharmex (with a passed multiplier phx_adj)
