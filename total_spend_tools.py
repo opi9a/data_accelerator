@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import inspect
+from copy import deepcopy
 from matplotlib import pyplot as plt
 from matplotlib import rcParams
 from matplotlib.backends.backend_pdf import PdfPages
@@ -8,6 +9,8 @@ plt.style.use('bmh')
 
 import RuleSet
 import r_funcs as rf
+import policy_tools as pt
+import projection_funcs as pf
 
 def make_rsets(df, params_dict, 
                 xtrap=False, return_all_sums = False, return_setting_sums=False, return_sum = False,
@@ -120,7 +123,7 @@ def make_rsets(df, params_dict,
 def load_spend_dset(path='c://Users//groberta//Work//data_accelerator/spend_data_proc/consol_ey_dset/spend_dset_07FEB18a.pkl', phx_adj=1.6, add_start_m=True, _debug=False):
     '''Helper function to load the psned dataset
 
-    Option to make the general adjustments to pharmex (with a passed multiplier phx_adj)
+    Option to make the general adjustments to pharmex (with a passed multiplier phx_avdj)
 
     Currently adds a start month (optionally, default true).  This is needed to make slices of the df in the rulesest, 
     but may be better done in generating the original spend dset. (TODO) 
@@ -352,72 +355,15 @@ def plot_rset_projs(rs_dict_in, rsets=None, selection=None, agg_filename=None, f
 
 
 
-##_________________________________________________________________________##
-
-
-def plot_hi_lo_base(hi_params=None, hi_out=None, lo_params=None, lo_out=None, base_params=None, base_out=None, df=None, 
-    scen_names=None,  trim=('1-2010', '12-2023'), colors=['darkred', 'seagreen', 'black'], figsize=(12,6),
-    outfile=None, fig=None, ax=None, return_fig=False):
-
-    '''Helper function to plot sensitivity analysis scenarios.
-
-    Either takes projection series (eg hi_out) or parameters that are used to generate projections (eg hi_params)
-
-    If passing parameters, must also pass a dataframe.
-
-    Can take an existing fig or ax.
-    '''
-
-
-    if base_out is None:
-        if base_params is None: 
-            print("need either base parameters or projections")
-            return
-        else:
-            base_out = make_rsets(df, base_params, return_sum=True, trim=trim)
-
-    if hi_out is None:
-        if hi_params is None: 
-            print("need either hi parameters or projections")
-            return
-        else:
-            hi_out = make_rsets(df, hi_params, return_sum=True, trim=trim)
-
-    if lo_out is None:
-        if lo_params is None: 
-            print("need either low parameters or projections")
-            return
-        else:
-            lo_out = make_rsets(df, lo_params, return_sum=True, trim=trim)
-
-    # work out order
-    # last_vals = dict(hi_out=hi_out[-1], lo_out=lo_out[-1], base_out_sum=base_out_sum[-1])
-
-    if fig is None and ax is None:
-        fig, ax = plt.subplots(figsize=figsize)
-
-    ind = base_out.index.to_timestamp()
-    for i, s in enumerate([hi_out, lo_out, base_out]):
-        line = ax.plot(ind, s*12/10**11, color=colors[i], alpha=0.5)
-        if i==2: line[0].set_linewidth(4)
-
-    plt.fill_between(ind, lo_out*12/10**11, base_out*12/10**11, color='seagreen', alpha=0.15)
-    plt.fill_between(ind, base_out*12/10**11, hi_out*12/10**11, color='darkred', alpha=0.15)
-    ax.legend(scen_names)
-
-    if outfile: fig.savefig(outfile)
-
-    if return_fig: return fig
-
 
 ##_________________________________________________________________________##
 
 
 def plot_hi_lo_base1(in_dict, df=None, 
-                        trim=('1-2010', '12-2023'), figsize=(12,6),
-                        outfile=None, fig=None, ax=None, return_fig=False, _debug=False):
+                        trim=('1-2010', '12-2023'), figsize=(12,6), ybarlims=None,
+                        outfile=None, fig=None, ax=None, bars=True, return_fig=False, _debug=False):
 
-    '''Pass in a dictionary of scenarios with structure:
+    '''Pass in a dictionary of scenarios with structure as follows:
 
     in_dict = { 'hi': {'params': <parameters for constructing rsets and getting projections>,
                        'sums':   <summed projections>,
@@ -431,12 +377,9 @@ def plot_hi_lo_base1(in_dict, df=None,
     
     Keys of in_dict can be whatever - used as the names of the scenarios.  
       (If one has 'base' it gets a thick line.)
+
     Need either sums or (params plus a dataframe - which can calc sums).  
     See Sensitivity Analysis notebook.
-
-    TODO 
-     - get default for dict where eg sums key missing
-     - smart infilling between lines
 
     '''
 
@@ -478,13 +421,20 @@ def plot_hi_lo_base1(in_dict, df=None,
     # so we have a df of results    
     res_df =  pd.concat(sums_list, axis=1)
 
+    num_plots = 1
+    if bars: num_plots = 2
+
+    # FIRST THE LINE GRAPH
     if fig is None and ax is None:
-        fig, ax = plt.subplots(figsize=figsize)
+        fig, ax = plt.subplots(num_plots, figsize=(figsize[0], figsize[1]*num_plots))
 
     ind = res_df.index.to_timestamp()
 
+    ax_it = ax
+    if bars: ax_it = ax[0]
+
     for i, s in enumerate(res_df):
-        line = ax.plot(ind, res_df[s]*12/10**11, alpha=0.5)
+        line = ax_it.plot(ind, res_df[s]*12/10**11, alpha=0.5)
         if in_dict[s].get('color', None) is not None:
             line[0].set_color(in_dict[s]['color'])
         if 'base' in s.lower(): line[0].set_linewidth(3)
@@ -497,10 +447,150 @@ def plot_hi_lo_base1(in_dict, df=None,
         base_out_name = base_out_name[0]
         for s in res_df.drop(base_out_name, axis=1):
             fill_color = in_dict[s].get('color', 'grey')
-            plt.fill_between(ind, res_df[s]*12/10**11, res_df[base_out_name]*12/10**11, color=fill_color, alpha=0.15)
+            ax_it.fill_between(ind, res_df[s]*12/10**11, res_df[base_out_name]*12/10**11, color=fill_color, alpha=0.15)
 
-    ax.legend([in_dict[s].get('legend',s) for s in in_dict])
+    leg = [in_dict[s].get('legend',s) for s in in_dict]
+    ax_it.legend(leg)
+
+    if bars: ax_it.set_xticks([])
+
+    #  NOW THE BAR CHART
+    if bars:
+        ann_df = res_df.groupby(res_df.index.year).sum()
+        diffs_df = ann_df.drop('baseline', axis=1).subtract(ann_df['baseline'], axis=0)/10**11
+
+        ax_it = ax[1]
+
+        bar_w = 1; gap = 0.4
+        
+        for i,s in enumerate(diffs_df.columns):
+            rect = ax_it.bar(diffs_df.index, diffs_df[s].values, width=bar_w-gap, color=in_dict[s]['color'], alpha=0.3)
+
+        if ybarlims is not None: ax_it.set_ylim(ybarlims)
+
+        ax_it.set_xticks([])
+        ax_it.set_xlim(diffs_df.index[0]-0.5, diffs_df.index[-1]+0.5)
+        # ax_it.legend([l for l in leg if 'base' not in l])
+
+
+        tab = ax_it.table(colLabels=diffs_df.index, 
+                          cellText=[diffs_df[x].round(2).values for x in diffs_df],
+                          rowLabels=diffs_df.columns)
+
+        tab.set_fontsize(12)
+        tab.scale(1,2)
+        # tab.auto_set_font_size
+
+        fig.subplots_adjust(hspace=0.05, wspace=0.3)
 
     if outfile: fig.savefig(outfile)
 
     if return_fig: return fig
+
+##_________________________________________________________________________##
+
+def find_opt(obs, start_vars, total_dur=158, term_gr = 0, drop = 0.85, incr=0.01, max_its=50, _debug=False):
+
+    pad=35
+    
+    # initialise a log structure - will be filled by learning and returned
+    log = dict(uptake_dur=dict(val=[start_vars['uptake_dur']],active=True),
+               coh_gr=dict(val=[start_vars['coh_gr']],active=True),
+               diffs=dict(val=[np.nan]))
+
+    # dict for  parameters to vary - will make copies from log, change them and pass to `get_diffs`
+    panel = dict(uptake_dur=None, coh_gr=None)
+
+    i=0
+    is_active = True
+
+    while i < max_its and is_active:
+        i+=1
+        
+        # for each var do the variation
+        for k in panel.keys():
+            if _debug: print('\nin var'.ljust(pad), k)
+
+            # first load up a panel from log (NB, want all the keys)
+            for j in panel:
+                panel[j]=deepcopy(log[j]['val'][-1])
+
+            # get the initial result
+            base_res = get_diff(panel, obs, total_dur=total_dur, drop=drop, term_gr=term_gr)      
+            if _debug: print('panel[k] base'.ljust(pad), panel[k])
+
+            # change the relevant var up and get up result
+            if k.endswith('_dur'):
+                # limit possible uptake_dur values
+                if panel[k]>1 and panel[k]<total_dur-1: 
+                    panel[k] +=1
+            else:
+                panel[k] *= (1+incr)
+            up_val = deepcopy(panel[k])
+            if _debug: print('panel[k] up'.ljust(pad), panel[k])
+            up_res = get_diff(panel, obs, total_dur=total_dur, drop=drop, term_gr=term_gr)
+
+            # same for down
+            panel[k]=deepcopy(log[k]['val'][-1])
+            if k.endswith('_dur'):
+                #can't allow this to be zero or bigger than max
+                if panel[k]>1 and panel[k]<total_dur-1: 
+                    panel[k]  -=1
+            else:
+                panel[k] *= (1-incr)
+            down_val = deepcopy(panel[k])
+            if _debug: print('panel[k] down'.ljust(pad), panel[k])
+            down_res = get_diff(panel, obs, total_dur=total_dur, drop=drop, term_gr=term_gr)
+
+    #         if _debug: print("var ".ljust(pad), k)
+            if _debug: print("\nbase".ljust(pad), base_res)
+            if _debug: print("up".ljust(pad), up_res)
+            if _debug: print("down".ljust(pad), down_res)
+
+            if up_res < base_res and up_res < down_res:
+                if _debug: print('--> UP WINS')
+                log[k]['val'].append(up_val)
+                log['diffs']['val'].append(up_res)
+                log[k]['active'] = True
+
+            elif down_res < base_res and down_res < up_res:
+                if _debug: print('--> DOWN WINS')
+                log[k]['val'].append(down_val)
+                log['diffs']['val'].append(down_res)
+                log[k]['active'] = True
+
+            else:
+                if _debug: print('--> no win')
+                log[k]['val'].append(log[k]['val'][-1])
+                log['diffs']['val'].append(base_res)
+                log[k]['active'] = False
+
+        if log['uptake_dur']['active'] or log['coh_gr']['active']:
+            is_active = True
+            if _debug: print('still active')
+
+        else:
+            is_active = False
+            if _debug: print('found inactive')
+            
+    return(log)
+
+
+##_________________________________________________________________________##
+
+
+def get_diff(panel, obs, total_dur = 158, drop=0.85, term_gr=0):
+    '''for an input 'panel' dict, with keys 'uptake_dur' and 'coh_gr', and a set of observations `obs`, 
+    return the least squares difficulty of the difference between the observed curve and a scaled synthetic
+    curve generated from the panel arguments.
+    
+    So currently this is explicitly set up only to handle those two parameters.
+    '''
+    sh = pt.Shed('x', panel['uptake_dur'], total_dur-panel['uptake_dur'], drop)
+    shape = pt.make_shape1(shed=sh)
+    unscaled = pf.get_forecast1(shape, term_gr=term_gr, coh_gr=panel['coh_gr'], n_pers=len(obs))
+    
+    scale_factor = obs.iloc[-12:].mean() / unscaled.iat[-6]
+    scaled = unscaled * scale_factor
+    
+    return sum((scaled - obs.values)**2)
