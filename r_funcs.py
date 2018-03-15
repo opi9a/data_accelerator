@@ -120,7 +120,7 @@ def infer_launch(in_arr, max_spend, streak_len_threshold=12, delta_threshold = 0
         if _debug: print('inferred_launch is ', inferred_launch)
         
     if verbose_return:
-        return(streaks)
+        return streaks
     
     elif streaks['uptake_detected']:
         return dict(uptake_detected = True,
@@ -415,8 +415,6 @@ def r_trend(df, n_pers, *, shed=None, uptake_dur=None, plat_dur=None, gen_mult=N
     pad = 35
     out=[]
 
-    # Currently need to stop things if a negative value of loe_delay
-    # if loe_delay <0: print('currently cannnot use negative loe delays'); return
 
     #  housekeeping - assign lifecycle variables depending on what was passed
     if shed is not None:

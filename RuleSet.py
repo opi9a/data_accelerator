@@ -148,6 +148,8 @@ class RuleSet:
 
         self.past = self.parent_df.loc[slice,:]
 
+        if _debug: print('got')
+
         if self.func == None:
             print("no function assigned")
             return

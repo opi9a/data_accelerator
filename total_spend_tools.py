@@ -12,6 +12,7 @@ import r_funcs as rf
 import policy_tools as pt
 import projection_funcs as pf
 
+
 def make_rsets(df, params_dict, 
                 xtrap=False, return_all_sums = False, return_setting_sums=False, return_sum = False,
                 trim=False, _debug=False):
@@ -83,7 +84,7 @@ def make_rsets(df, params_dict,
     if xtrap or return_all_sums or return_setting_sums or return_sum: 
         for r in rsets:
             if _debug: print('xtrapping rset ', r, end=" ")
-            rsets[r].xtrap(n_pers)
+            rsets[r].xtrap(n_pers, _debug=False)
             if _debug: print(' ..OK')
 
     # if any sums reqd, make the full set
@@ -119,71 +120,83 @@ def make_rsets(df, params_dict,
 
 ##____________________________________________________________________________________________________________##
 
+def load_spend_dset(path='c://Users//groberta//Work//data_accelerator/spend_data_proc/consol_ey_dset/adjusted_consol_dset_15MAR18.pkl', 
+                    add_start_m=True, trim_to_financial_year='2017-03', _debug=True):
+    '''Helper function to load the spend dataset using latest inputs - which have been adjusted to match DH Finance (on latest iteration)
 
-def load_spend_dset(path='c://Users//groberta//Work//data_accelerator/spend_data_proc/consol_ey_dset/spend_dset_07FEB18a.pkl', phx_adj=1.6, add_start_m=True, _debug=False):
-    '''Helper function to load the psned dataset
-
-    Option to make the general adjustments to pharmex (with a passed multiplier phx_avdj)
+    Option to trim to the last month of DH Finance projections - which is the last point at which we have a proper multiplier
 
     Currently adds a start month (optionally, default true).  This is needed to make slices of the df in the rulesest, 
     but may be better done in generating the original spend dset. (TODO) 
     '''
+    pad = 40
 
-    pad = 30
+    if _debug:
+        print('Path for inputs spend df\n-->', path)
 
     df = pd.read_pickle(path)
 
     if _debug: 
-        print('\noriginal sum, £m'.ljust(pad), "{:0,.3f}".format(df.sum().sum()/10**8))
-        by_setting = df.groupby(level=1).sum().sum(axis=1)/10**8
-        print("by_setting.index[0]".ljust(pad), "{:0,.3f}".format(by_setting[0]))
-        print("by_setting.index[1]".ljust(pad), "{:0,.3f}".format(by_setting[1]))
- 
-    # secondary spend before adjusting
-    if _debug:
-        sec1 = df.groupby(level=1).sum().loc['secondary',:].sum()
-        print('\napplying ratio'.ljust(pad), phx_adj, end='\n')
+        print('\nlast period is'.ljust(pad), df.columns[-1], end="")
 
-    df.loc[pd.IndexSlice[:,'secondary'],:] *= phx_adj
-    if _debug: 
-        by_setting = df.groupby(level=1).sum().sum(axis=1)/10**8
-        print('\nfinal sum, £m'.ljust(pad), "{:0,.3f}".format(by_setting.sum()))
-        print("by_setting.index[0]".ljust(pad), "{:0,.3f}".format(by_setting[0]))
-        print("by_setting.index[1]".ljust(pad), "{:0,.3f}".format(by_setting[1]))       
-        print("\nratio actually applied ".ljust(pad), "{:0,.3f}".format(df.groupby(level=1).sum().loc['secondary',:].sum() / sec1))
-        print('len'.ljust(pad), len(df))
+    if trim_to_financial_year:
+        df = df.loc[:,:trim_to_financial_year]
+
+        if _debug: 
+            print('\ntrimmed, last period now'.ljust(pad), df.columns[-1])
 
     # add a start month
     if add_start_m:
         start_m_ind = pd.PeriodIndex(df.index.get_level_values(level='adjusted_launch_date'), freq='M', name='start_month')
         df.set_index(start_m_ind, append=True, inplace=True)
+        if _debug:
+            print('\nadded a start month, index now\n-->', df.index.names)
 
     return df
+
 
 ##____________________________________________________________________________________________________________##
 
 
-def plot_rset_projs(rs_dict_in, rsets=None, selection=None, agg_filename=None, file_suffix=None, num_plots=12, n_pers=120, xlims=None, 
-                out_folder='figs/test_plot_rset/', save_fig=True, _debug=False):
+def plot_rset_projs(rs_dict_in, rsets=None, selection=None, num_plots=12, n_pers=120, xlims=None, show_phases=True,
+                    agg_filename=None, file_suffix=None, out_folder='figs/test_plot_rset/', _debug=False):
     
     '''Helper function for plotting projections of individual products in rulesets.
 
     For a dict of rulesets, sorts by max sales and takes num_plots highest.
+    Then for each generates a separate plot containing each product in the high sales set.
 
-    If pass rsets list of keys, will only use those.
+    PARAMETERS
 
-    Then for each generates a plot containing each product in the high sales set.
+    rs_dict_in [reqd]     : a dict of rulesets (i.e. the normal core output from a projection)
 
-    Selection: pass a list of product names instead of finding products with max sales
+    rsets                 : can pass a list of keys (eg 'biol_sec'), and will use only those, 
+                            rather than going through whole of rs_dict_in
 
-    agg_filename: puts together in a single image file if pass a filename (no need for a .png ending)
-     - most useful wwhen passing a selection
-     - will then find instances of the selection elements across all the rulesets
-     - so need to extend selection names to include all instances, eg a name may occur in several. 
-     - Do this with ext_selection. 
-     - Also use the length of this to set the number of plots, and 
-     - use ext_selection to hold the annotated names (identifying rset they were found it)
-     - also use an additional iterator, agg_i, which keeps incrementing across different rsets
+    selection             : pass a list of product names instead of finding products with max sales
+
+    num_plots             : number of plots for each ruleset
+
+    agg_filename          : puts together in a single image file if pass a filename 
+                             - most useful wwhen passing a selection, to get a single file of output
+                             
+                             [makes the code a bit complex so dev notes:]
+                             - will then find instances of the selection elements across all the rulesets
+                             - so need to extend selection names to include all instances, eg a name may occur in several. 
+                             - Do this with ext_selection. 
+                             - Also use the length of this to set the number of plots, and 
+                             - use ext_selection to hold the annotated names (identifying rset they were found it)
+                             - also use an additional iterator, agg_i, which keeps incrementing across different rsets
+
+    n_pers                 : number of periods to project for
+
+    xlims                  : x axis limits for plots
+
+    show_phases            : will make coloured areas showing uptake and launch phases
+
+    file_suffix            : gets added onto output file names.  Useful if want to distinguish from prev plots    
+
+    out_folder             : destination folder
     '''
     if _debug: print("\nIN FUNCTION:  ".ljust(20), inspect.stack()[0][3])
     if _debug: print("..called by:  ".ljust(20), inspect.stack()[1][3], end="\n\n")   
@@ -261,10 +274,16 @@ def plot_rset_projs(rs_dict_in, rsets=None, selection=None, agg_filename=None, f
         
         # make pdf for this ruleset (remember in a loop here already), if not already made one for aggregate
         if agg_filename is None:
-            pdf = PdfPages(out_folder + r + file_suffix + '.pdf')
+            if file_suffix is None: fs = ""
+            else: fs = file_suffix
+            pdf = PdfPages(out_folder + r + fs + '.pdf')
 
         # now loop through the returned dataframes - one per product (each with 3 cols / lines to plot)
         for i, df in enumerate(df_list):
+
+            if selected.iloc[i].name[0].lower() == 'not applicable':
+                print('found product named "not applicable" - ignoring')
+                continue
 
             # first get rid of zeros for cleaner plotting
             df = df[df!=0]
@@ -304,7 +323,8 @@ def plot_rset_projs(rs_dict_in, rsets=None, selection=None, agg_filename=None, f
 
             # and now loop through the actual columns in the dataframe for the product
             for col in df:
-                ax.plot(ind, df[col], linewidth=1)
+                line = ax.plot(ind, df[col], linewidth=1)
+                if col == 'projected': line[0].set_color('darkorchid')
 
             plot_name = selected.iloc[i].name[0]
             if agg_filename: plot_name = ext_selection[agg_i]
@@ -321,18 +341,18 @@ def plot_rset_projs(rs_dict_in, rsets=None, selection=None, agg_filename=None, f
             lim_3 = None
 
  
-            if lim_1 > ind_start.to_timestamp(): 
+            if lim_1 > ind_start.to_timestamp() and show_phases: 
                 ax.axvspan(lim_0, lim_1, facecolor='g', alpha=0.1)
                 # only draw the line if in scope
                 if lim_1 < ind_end.to_timestamp():
                     ax.axvline(x=lim_1, linestyle='--', linewidth=1, color='gray')
 
             if lim_2 > ind_start.to_timestamp(): 
-                ax.axvspan(lim_1, lim_2, facecolor='r', alpha=0.1)
+                if show_phases: ax.axvspan(lim_1, lim_2, facecolor='r', alpha=0.1)
                 
                 # only draw the line if in scope
                 if lim_2 < ind_end.to_timestamp():
-                    ax.axvline(x=lim_2,  linewidth=2, color='gray')
+                    ax.axvline(x=lim_2,  linewidth=2, linestyle='--', color='seagreen')
 
             ax.set_ylim(0)
 
