@@ -186,31 +186,3 @@ class RuleSet:
         return "\n".join(outlist)
     
 
-
-    
-if __name__ == "__main__":
-    df = pd.read_pickle('c:/Users/groberta/Work/data_accelerator/spend_data_proc/dfs/main_unstacked_17AUG.pkl')
-    prof1 = np.genfromtxt('c:/Users/groberta/Work/data_accelerator/profiles/prof1.csv')
-    cutoff = pd.Period('3-2014', freq='M')
-    
-    test=2
-    
-    if test == 1:    
-        test_r = RuleSet(df, 't1')
-        test_r.index_slice = {'biol':True}
-        test_r.func = funcs.r_profile
-        test_r.f_args = {'profile':prof1, 'gen_mult':0.5}
-        print(test_r)
-        test_r.xtrap(120)
-
-    if test == 2:    
-        test_r = RuleSet(df, 't2')
-        test_r.index_slice = {'start_date':slice(cutoff,None,None)}
-        test_r.func = funcs.r_fut
-        test_r.f_args = {'profile':prof1, 'cutoff_date':cutoff, 
-                            'coh_growth':0, 'term_growth':0, 'name':'fut'}
-        print(test_r)
-        test_r.xtrap(120)
-    
-    
-    
