@@ -73,7 +73,6 @@ def dump_to_xls(res_df, outfile, append=False, prefix="", in_dict=None, shapes=N
     main_out = params_header.append(res_df)
     annual_out = params_header.append(res_df.groupby(res_df.index.year).sum())
     scen_sums_out = res_df.groupby(level=0, axis=1).sum()
-    print(scen_sums_out)
     scen_sums_ann_out = scen_sums_out.groupby(res_df.index.year).sum()
     scen_sums_ann_diff_out = scen_sums_ann_out.subtract(scen_sums_ann_out['baseline'], axis=0).iloc[:,1:]
 
