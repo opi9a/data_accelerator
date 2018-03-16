@@ -39,7 +39,8 @@ def spend_mult(sav_rate, k1=None, k2=None, ratio=None):
 
 
 
-def dump_to_xls(res_df, outfile, append=False, prefix="", in_dict=None, shapes=None, log=False, _debug=False):
+def dump_to_xls(res_df, outfile, append=False, prefix="", in_dict=None, shapes=None, log=False, 
+    npv_rs=None, npv_yrs_lim=5, _debug=False):
     '''Dump a results DataFrame to an xls, with option to make shapes from a  
      dict of scenarios or from a scenario alone, and/or passing shapes
     '''
@@ -71,6 +72,17 @@ def dump_to_xls(res_df, outfile, append=False, prefix="", in_dict=None, shapes=N
     shapes_out = params_header.append(shapes_body)
     main_out = params_header.append(res_df)
     annual_out = params_header.append(res_df.groupby(res_df.index.year).sum())
+    scen_sums_out = res_df.groupby(level=0, axis=1).sum()
+    print(scen_sums_out)
+    scen_sums_ann_out = scen_sums_out.groupby(res_df.index.year).sum()
+    scen_sums_ann_diff_out = scen_sums_ann_out.subtract(scen_sums_ann_out['baseline'], axis=0).iloc[:,1:]
+
+    if npv_rs is not None:
+        npv_df = pd.DataFrame(index=npv_rs, columns = scen_sums_ann_diff_out.columns)
+        for npv_r in npv_rs:
+            npv_df.loc[npv_r,:] = scen_sums_ann_diff_out.iloc[:npv_yrs_lim,:].multiply((1 - npv_r) ** np.arange(npv_yrs_lim), axis=0).sum()
+
+        npv_df.index.name = 'disc rate'
 
     # write out - either appending or making a new one, or not appending
     if append:
@@ -88,6 +100,13 @@ def dump_to_xls(res_df, outfile, append=False, prefix="", in_dict=None, shapes=N
     shapes_out.to_excel(writer, prefix + 'shapes')
     main_out.to_excel(writer, prefix + 'main')
     annual_out.to_excel(writer, prefix + 'annual')
+    scen_sums_out.to_excel(writer, prefix + 'scen_sums')
+    scen_sums_ann_out.to_excel(writer, prefix + 'scen_sums_ann')
+    scen_sums_ann_diff_out.to_excel(writer, prefix + 'scen_sums_ann_diff')
+
+    if npv_rs is not None:
+        npv_df.to_excel(writer, prefix + 'NPVs')
+
 
     writer.save()
 
